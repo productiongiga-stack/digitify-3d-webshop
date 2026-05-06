@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — NEBULOUS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="/" class="logo"><span class="logo-mark">&#x2726;</span><span>NEBULOUS</span></a>
+      <div class="nav-links">
+        <a href="/designer" class="nav-link">Designer</a>
+        <a href="/dashboard" class="nav-link active">Dashboard</a>
+        <a href="/account" class="nav-link">Account</a>
+      </div>
+      <div class="nav-right" style="display:flex;gap:.5rem;align-items:center">
+        <span data-theme-switch></span>
+        <span data-cart-icon></span>
+        <span data-nav-user style="display:flex;gap:.5rem;align-items:center"></span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="app-shell">
+    <div class="app-main dashboard-wide" id="content">
+      <div class="page-head">
+        <div>
+          <span class="page-eyebrow">Mijn bestellingen</span>
+          <h1 class="page-title">Welkom terug<span id="firstName"></span></h1>
+          <p class="page-sub">Hier zie je een overzicht van al je bestellingen en hun status.</p>
+        </div>
+        <div class="page-head-actions">
+          <a href="/cart" class="btn btn-ghost btn-sm">Winkelmand</a>
+          <a href="/" class="btn btn-primary btn-sm">+ Nieuw ontwerp</a>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="stats"></div>
+
+      <div id="ordersWrap" style="margin-top:1.5rem"></div>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+  <script>
+    const STATUS_FLOW = [
+      { code: 'NEW', label: 'Nieuw', icon: '&#x25CB;' },
+      { code: 'APPROVED', label: 'Goedgekeurd', icon: '&#x2713;' },
+      { code: 'PAYMENT', label: 'Betaling', icon: '&#x24C5;' },
+      { code: 'PAID', label: 'Betaald', icon: '&#x2665;' },
+      { code: 'IN_PRODUCTION', label: 'Productie', icon: '&#x2699;' },
+      { code: 'SHIPPED', label: 'Verzonden', icon: '&#x25B6;' },
+      { code: 'DELIVERED', label: 'Bezorgd', icon: '&#x2714;' }
+    ];
+    function toTimelineCode(status) {
+      const raw = String(status || '').toUpperCase();
+      if (raw === 'APPROVED_AWAITING_PAYMENT' || raw === 'PAYMENT_PENDING') return 'PAYMENT';
+      return raw;
+    }
+
+    (async () => {
+      const user = await NEB.requireAuth();
+      if (!user) return;
+      window.NEB_USER = user;
+      await NEB.paintNav();
+
+      document.getElementById('firstName').textContent = user.firstName ? `, ${user.firstName}` : '';
+
+      const { orders } = await NEB.get('/api/orders/mine');
+      const stats = document.getElementById('stats');
+      const totalSpent = orders.reduce((s, o) => s + (o.total || 0), 0);
+      const inProgress = orders.filter(o =>
+        ['NEW', 'APPROVED_AWAITING_PAYMENT', 'PAYMENT_PENDING', 'PAID', 'IN_PRODUCTION'].includes(o.status)
+      ).length;
+      const delivered = orders.filter(o => o.status === 'DELIVERED').length;
+
+      stats.innerHTML = `
+        <div class="stat">
+          <div class="stat-icon">&#x1F4CB;</div>
+          <div class="stat-value">${orders.length}</div>
+          <div class="stat-label">Bestellingen</div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon">&#x23F3;</div>
+          <div class="stat-value">${inProgress}</div>
+          <div class="stat-label">In behandeling</div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon">&#x2705;</div>
+          <div class="stat-value">${delivered}</div>
+          <div class="stat-label">Bezorgd</div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon">&#x1F4B0;</div>
+          <div class="stat-value">${NEB.fmtEUR(totalSpent)}</div>
+          <div class="stat-label">Totaal besteed</div>
+        </div>
+      `;
+
+      const wrap = document.getElementById('ordersWrap');
+      if (!orders.length) {
+        wrap.innerHTML = `
+          <div class="card empty-state" style="text-align:center;padding:3rem 2rem">
+            <div style="font-size:2.5rem;margin-bottom:1rem">&#x2726;</div>
+            <h3 style="margin:0 0 .5rem">Nog geen bestellingen</h3>
+            <p class="muted compact" style="margin:0 0 1.5rem">Ga naar de designer en maak je eerste custom product.</p>
+            <a href="/" class="btn btn-primary">Start met ontwerpen</a>
+          </div>`;
+        return;
+      }
+
+      wrap.innerHTML = `
+        <div class="orders-header">
+          <h2 class="card-title">Bestellingen</h2>
+        </div>
+        <div class="orders-list">
+          ${orders.map(o => {
+            const firstPreview = o.items.find(i => i.preview_path)?.preview_path;
+            const itemCount = o.items.reduce((s, i) => s + i.qty, 0);
+            const idx = STATUS_FLOW.findIndex(s => s.code === toTimelineCode(o.status));
+            const pct = o.status === 'CANCELLED' ? 0 : Math.round(((idx + 1) / STATUS_FLOW.length) * 100);
+            return `
+            <div class="order-card" data-id="${o.id}">
+              <div class="oc-thumb">
+                ${firstPreview ? `<img src="/${firstPreview}" alt="">` : '<div class="oc-thumb-empty">&#x2726;</div>'}
+              </div>
+              <div class="oc-meta">
+                <div class="oc-top">
+                  <strong class="oc-num">#${String(o.id).padStart(4, '0')}</strong>
+                  ${NEB.statusPill(o.status)}
+                  ${o.invoice ? NEB.invoiceStatusPill(o.invoice) : ''}
+                  ${o.invoice ? (NEB.invoiceDuePill(o.invoice) || '') : ''}
+                </div>
+                <div class="oc-detail">${itemCount} stuk${itemCount === 1 ? '' : 's'} &middot; ${o.items.length} ontwerp${o.items.length === 1 ? '' : 'en'} &middot; ${NEB.fmtDate(o.created_at)}</div>
+                ${o.status !== 'CANCELLED' ? `
+                <div class="oc-progress-wrap">
+                  <div class="oc-progress-bar"><div class="oc-progress-fill" style="width:${pct}%"></div></div>
+                  <span class="oc-progress-label">${STATUS_FLOW[Math.max(0,idx)]?.label || ''}</span>
+                </div>` : ''}
+              </div>
+              <div class="oc-right">
+                <strong class="oc-price">${NEB.fmtEUR(o.total)}</strong>
+                <button class="btn btn-ghost btn-sm" data-view="${o.id}">Bekijk</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+
+      wrap.addEventListener('click', e => {
+        const id = e.target.closest('[data-view]')?.dataset.view;
+        if (id) showOrder(id);
+      });
+
+      const params = new URLSearchParams(location.search);
+      const orderId = params.get('order');
+      if (orderId) showOrder(orderId);
+    })();
+
+    async function showOrder(id) {
+      try {
+        const { order, invoice = null, items, history: statusHistory, payments = [] } = await NEB.get('/api/orders/' + id);
+        document.getElementById('dashboardOrderModal')?.remove();
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.id = 'dashboardOrderModal';
+        modal.innerHTML = `
+          <div class="modal-box order-modal-box">
+            <div class="order-modal-body">
+              ${renderDetail(order, invoice, items, statusHistory, payments)}
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+        requestAnimationFrame(() => modal.classList.add('show'));
+        const close = () => {
+          modal.classList.remove('show');
+          setTimeout(() => modal.remove(), 220);
+          window.history.replaceState({}, '', '/dashboard');
+        };
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+        modal.querySelector('[data-cancel]')?.addEventListener('click', async () => {
+          if (!confirm('Bestelling annuleren?')) return;
+          try {
+            await NEB.put('/api/orders/' + id + '/cancel');
+            NEB.toast('Geannuleerd', 'success');
+            close();
+            await showOrder(id);
+          } catch (err) { NEB.toast(err.message, 'error'); }
+        });
+        modal.querySelector('[data-close]')?.addEventListener('click', close);
+      } catch (err) {
+        NEB.toast(err.message, 'error');
+      }
+    }
+
+    function renderTimeline(status, history) {
+      if (status === 'CANCELLED') {
+        return `<div class="order-timeline cancelled"><span class="pill pill-danger">Geannuleerd</span></div>`;
+      }
+      const idx = STATUS_FLOW.findIndex(s => s.code === toTimelineCode(status));
+      return `
+        <div class="order-timeline">
+          ${STATUS_FLOW.map((s, i) => {
+            const cls = i < idx ? 'done' : (i === idx ? 'current' : '');
+            const ev = s.code === 'PAYMENT'
+              ? history.find(h => ['APPROVED_AWAITING_PAYMENT', 'PAYMENT_PENDING'].includes(String(h.status || '').toUpperCase()))
+              : history.find(h => toTimelineCode(h.status) === s.code);
+            return `<div class="tl-step ${cls}" title="${s.label}${ev ? ' · ' + NEB.fmtDate(ev.created_at) : ''}">
+              <div class="tl-dot"></div>
+              <div class="tl-label">${s.label}</div>
+              ${ev ? `<div class="tl-date">${NEB.fmtDate(ev.created_at)}</div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    function renderDetail(o, invoice, items, history, payments) {
+      const cust = `${o.customer_first || ''} ${o.customer_last || ''}`.trim() || '—';
+      const canCancel = ['NEW', 'APPROVED_AWAITING_PAYMENT', 'PAYMENT_PENDING'].includes(o.status);
+      return `
+        <div class="card" style="margin:0">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Order #${String(o.id).padStart(4, '0')}</h2>
+              <p class="card-sub">${NEB.fmtDate(o.created_at)} &nbsp;&middot;&nbsp; ${NEB.statusPill(o.status)}</p>
+            </div>
+            <div style="display:flex;gap:.5rem">
+              ${canCancel ? '<button class="btn btn-danger btn-sm" data-cancel>Annuleer</button>' : ''}
+              <button class="btn btn-ghost btn-sm" data-close>&#x2715; Sluiten</button>
+            </div>
+          </div>
+
+          ${renderTimeline(o.status, history)}
+
+          <div class="detail-sections">
+            <div class="detail-section">
+              <h3 class="ds-title">Klantgegevens</h3>
+              <div class="kv-list">
+                <div class="kv"><span class="kv-key">Naam</span><span class="kv-val">${cust}</span></div>
+                ${o.customer_company ? `<div class="kv"><span class="kv-key">Bedrijf</span><span class="kv-val">${o.customer_company}</span></div>` : ''}
+                ${o.customer_vat ? `<div class="kv"><span class="kv-key">BTW</span><span class="kv-val">${o.customer_vat}</span></div>` : ''}
+                <div class="kv"><span class="kv-key">E-mail</span><span class="kv-val">${o.customer_email || '—'}</span></div>
+                <div class="kv"><span class="kv-key">Adres</span><span class="kv-val">${[o.address, [o.postcode, o.city].filter(Boolean).join(' ')].filter(Boolean).join('<br>') || '—'}</span></div>
+                ${o.phone ? `<div class="kv"><span class="kv-key">Telefoon</span><span class="kv-val">${o.phone}</span></div>` : ''}
+                <div class="kv"><span class="kv-key"><strong>Totaal</strong></span><span class="kv-val"><strong>${NEB.fmtEUR(o.total)}</strong></span></div>
+              </div>
+            </div>
+
+            <div class="detail-section">
+              <h3 class="ds-title">Factuur</h3>
+              <div class="kv-list">
+                <div class="kv"><span class="kv-key">Status</span><span class="kv-val">${invoice ? NEB.invoiceStatusPill(invoice) : '<span class="muted compact">Nog niet beschikbaar</span>'}</span></div>
+                <div class="kv"><span class="kv-key">Nummer</span><span class="kv-val">${invoice?.invoice_number || '—'}</span></div>
+                <div class="kv"><span class="kv-key">Factuurdatum</span><span class="kv-val">${invoice?.issue_date ? NEB.fmtDate(invoice.issue_date) : '—'}</span></div>
+                <div class="kv"><span class="kv-key">Vervaldatum</span><span class="kv-val">${invoice?.due_date ? NEB.fmtDate(invoice.due_date) : '—'} ${invoice ? (NEB.invoiceDuePill(invoice) || '') : ''}</span></div>
+                <div class="kv"><span class="kv-key">Verstuurd</span><span class="kv-val">${invoice?.sent_at ? NEB.fmtDate(invoice.sent_at) : '—'}</span></div>
+              </div>
+            </div>
+
+            <div class="detail-section">
+              <h3 class="ds-title">Betaling</h3>
+              ${renderPayments(payments)}
+            </div>
+          </div>
+
+          <h3 class="ds-title" style="margin:1.25rem 0 .75rem">Items (${items.length})</h3>
+          ${items.map(it => `
+            <div class="card" style="margin-bottom:.85rem;padding:1.25rem">
+              <div class="detail-grid">
+                <div class="preview-tile">
+                  ${it.preview_path ? `<img src="/${it.preview_path}" alt="">` : `<div class="muted compact" style="padding:1rem">Geen preview</div>`}
+                </div>
+                <div>
+                  <div class="kv-list">
+                    <div class="kv"><span class="kv-key">Product</span><span class="kv-val">${it.product_label || 'Product'}</span></div>
+                    <div class="kv"><span class="kv-key">Kleur</span><span class="kv-val">${it.color_hex ? `<span class="swatch-dot" style="background:${it.color_hex}"></span>` : ''}${it.color_name || '—'}</span></div>
+                    <div class="kv"><span class="kv-key">Maat</span><span class="kv-val">${it.size}</span></div>
+                    <div class="kv"><span class="kv-key">Aantal</span><span class="kv-val">${it.qty}</span></div>
+                    <div class="kv"><span class="kv-key">Prijs</span><span class="kv-val"><strong>${NEB.fmtEUR(it.total)}</strong></span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="designs-list" style="margin-top:.85rem">
+                ${it.designs.map((d, i) => `
+                  <div class="design-tile">
+                    <div class="preview">${d.file_path ? `<img src="/${d.file_path}" alt="">` : '<div class="muted">geen bestand</div>'}</div>
+                    <h4>${d.name || 'Design ' + (i + 1)}</h4>
+                    <small class="muted">${d.position} &middot; schaal ${d.scale}%</small>
+                    ${d.note ? `<div class="note">&ldquo;${d.note}&rdquo;</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+
+          <div class="tl-history" style="margin-top:.5rem">
+            <h3 class="ds-title" style="margin-bottom:.5rem">Geschiedenis</h3>
+            ${history.map(h => `
+              <div class="h-row">
+                <span><strong>${labelFor(h.status)}</strong>${h.note ? ' &middot; ' + h.note : ''}</span>
+                <span class="muted compact">${NEB.fmtDate(h.created_at)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    }
+
+    function renderPayments(payments) {
+      if (!payments.length) return `<p class="muted compact">Nog geen betaalpoging geregistreerd.</p>`;
+      const latest = payments[0];
+      const statusMap = {
+        CREATED: 'Betaallink aangemaakt',
+        PENDING: 'Betaling in behandeling',
+        PAID: 'Betaald',
+        FAILED: 'Betaalpoging mislukt'
+      };
+      const label = statusMap[String(latest.status || '').toUpperCase()] || (latest.status || 'Onbekend');
+      return `
+        <div class="kv-list">
+          <div class="kv"><span class="kv-key">Status</span><span class="kv-val">${label}</span></div>
+          <div class="kv"><span class="kv-key">Bedrag</span><span class="kv-val">${NEB.fmtEUR(latest.amount)} ${latest.currency || ''}</span></div>
+          <div class="kv"><span class="kv-key">Aangemaakt</span><span class="kv-val">${NEB.fmtDate(latest.created_at)}</span></div>
+          <div class="kv"><span class="kv-key">Betaald op</span><span class="kv-val">${latest.paid_at ? NEB.fmtDate(latest.paid_at) : '—'}</span></div>
+          ${latest.checkout_url ? `<div class="kv"><span class="kv-key">Betaallink</span><span class="kv-val"><a href="${latest.checkout_url}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">Open betaalpagina &rarr;</a></span></div>` : ''}
+        </div>`;
+    }
+
+    function labelFor(status) {
+      const m = {
+        NEW: 'Nieuw',
+        APPROVED: 'Goedgekeurd',
+        APPROVED_AWAITING_PAYMENT: 'Betaling',
+        PAYMENT_PENDING: 'Betaling',
+        PAID: 'Betaald',
+        IN_PRODUCTION: 'Productie',
+        SHIPPED: 'Verzonden',
+        DELIVERED: 'Bezorgd',
+        CANCELLED: 'Geannuleerd'
+      };
+      return m[status] || status;
+    }
+  </script>
+</body>
+</html>

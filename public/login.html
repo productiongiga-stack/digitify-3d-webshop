@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inloggen — NEBULOUS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <div style="position:fixed;top:1.25rem;right:1.5rem;z-index:50" data-theme-switch></div>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <a href="/" class="auth-logo"><span class="logo-mark">&#x2726;</span><span>NEBULOUS</span></a>
+      <h1 class="auth-title">Welkom terug</h1>
+      <p class="auth-sub">Log in om je ontwerpen en bestellingen te beheren.</p>
+
+      <div id="alertSlot"></div>
+
+      <form id="loginForm" class="form-stack" autocomplete="on" novalidate>
+        <div class="field">
+          <label for="email">E-mailadres</label>
+          <input type="email" id="email" name="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="password">Wachtwoord</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+        </div>
+        <label class="field-check" for="remember">
+          <input type="checkbox" id="remember" name="remember" checked>
+          <span>Onthoud mij (30 dagen)</span>
+        </label>
+        <p class="field-check-hint">Uitgevinkt = alleen ingelogd tot je browser sluit.</p>
+        <div id="otpStep" class="form-stack" hidden>
+          <div class="field">
+            <label for="otpCode">2FA code</label>
+            <input type="text" id="otpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6 cijfers" maxlength="6">
+          </div>
+          <p class="muted compact" style="margin-top:-.4rem">Open je authenticator app en vul de 6-cijferige code in.</p>
+          <div style="display:flex;justify-content:flex-end">
+            <button type="button" class="btn btn-ghost btn-sm" id="otpCancelBtn">Opnieuw starten</button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Inloggen</button>
+      </form>
+
+      <p class="auth-foot">Nog geen account? <a href="/register">Registreer hier</a></p>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script>
+    (async () => {
+      const me = await NEB.me().catch(() => null);
+      if (me) location.href = new URLSearchParams(location.search).get('next') || '/dashboard';
+    })();
+
+    const form = document.getElementById('loginForm');
+    const alertSlot = document.getElementById('alertSlot');
+    const btn = document.getElementById('submitBtn');
+    const otpStep = document.getElementById('otpStep');
+    const otpCode = document.getElementById('otpCode');
+    const otpCancelBtn = document.getElementById('otpCancelBtn');
+    let needsTwoFactor = false;
+
+    function resetTwoFactorStep() {
+      needsTwoFactor = false;
+      otpStep.hidden = true;
+      otpCode.value = '';
+      form.email.disabled = false;
+      form.password.disabled = false;
+      form.remember.disabled = false;
+      btn.textContent = 'Inloggen';
+    }
+
+    otpCancelBtn.addEventListener('click', () => {
+      resetTwoFactorStep();
+      alertSlot.innerHTML = '';
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertSlot.innerHTML = '';
+      btn.disabled = true; btn.textContent = 'Bezig...';
+      try {
+        let data;
+        if (needsTwoFactor) {
+          data = await NEB.post('/api/auth/login/2fa', {
+            code: otpCode.value.trim()
+          });
+        } else {
+          data = await NEB.post('/api/auth/login', {
+            email: form.email.value.trim(),
+            password: form.password.value,
+            remember: !!form.remember.checked
+          });
+        }
+
+        if (data.requires2fa) {
+          needsTwoFactor = true;
+          otpStep.hidden = false;
+          form.email.disabled = true;
+          form.password.disabled = true;
+          form.remember.disabled = true;
+          btn.textContent = 'Verifieer 2FA';
+          btn.disabled = false;
+          otpCode.focus();
+          return;
+        }
+
+        const next = new URLSearchParams(location.search).get('next');
+        if (data.enforce2faSetup) {
+          location.href = '/account?setup2fa=1&next=' + encodeURIComponent(next || (data.user.role === 'USER' ? '/dashboard' : '/admin'));
+          return;
+        }
+        location.href = next || (data.user.role === 'USER' ? '/dashboard' : '/admin');
+      } catch (err) {
+        alertSlot.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      } finally {
+        btn.textContent = needsTwoFactor ? 'Verifieer 2FA' : 'Inloggen';
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

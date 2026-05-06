@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registreren — NEBULOUS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <div style="position:fixed;top:1.25rem;right:1.5rem;z-index:50" data-theme-switch></div>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <a href="/" class="auth-logo"><span class="logo-mark">&#x2726;</span><span>NEBULOUS</span></a>
+      <h1 class="auth-title">Account aanmaken</h1>
+      <p class="auth-sub">Direct actief na registratie — bevestig je e-mailadres om te kunnen bestellen.</p>
+
+      <div id="alertSlot"></div>
+
+      <form id="regForm" class="form-stack" autocomplete="on" novalidate>
+        <div class="form-grid-2">
+          <div class="field">
+            <label for="firstName">Voornaam</label>
+            <input type="text" id="firstName" name="firstName" autocomplete="given-name" required>
+          </div>
+          <div class="field">
+            <label for="lastName">Achternaam</label>
+            <input type="text" id="lastName" name="lastName" autocomplete="family-name" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="email">E-mailadres</label>
+          <input type="email" id="email" name="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="password">Wachtwoord</label>
+          <input type="password" id="password" name="password" autocomplete="new-password" minlength="6" required>
+          <div class="pwd-strength" id="pwdStrength">
+            <div class="pwd-strength-bar" id="ps1"></div>
+            <div class="pwd-strength-bar" id="ps2"></div>
+            <div class="pwd-strength-bar" id="ps3"></div>
+          </div>
+          <span class="hint" id="pwdHint">Minstens 6 tekens.</span>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Account aanmaken</button>
+      </form>
+
+      <p class="auth-foot">Heb je al een account? <a href="/login">Inloggen</a></p>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script>
+    const form = document.getElementById('regForm');
+    const alertSlot = document.getElementById('alertSlot');
+    const btn = document.getElementById('submitBtn');
+
+    // Password strength indicator
+    const pwdInput = document.getElementById('password');
+    const bars = [document.getElementById('ps1'), document.getElementById('ps2'), document.getElementById('ps3')];
+    const pwdHint = document.getElementById('pwdHint');
+    pwdInput?.addEventListener('input', () => {
+      const v = pwdInput.value;
+      const len = v.length;
+      const hasSpecial = /[^a-zA-Z0-9]/.test(v);
+      const hasNum = /\d/.test(v);
+      const strength = (len >= 8 ? 1 : 0) + (hasSpecial ? 1 : 0) + (hasNum ? 1 : 0);
+      const classes = ['', 'weak', 'ok', 'strong'];
+      const labels = ['', 'Te kort', 'Redelijk', 'Sterk'];
+      bars.forEach((b, i) => {
+        b.className = 'pwd-strength-bar';
+        if (len > 0 && i < Math.max(1, strength)) b.classList.add(classes[Math.max(1, strength)]);
+      });
+      if (pwdHint) pwdHint.textContent = len === 0 ? 'Minstens 6 tekens.' : labels[Math.max(1, strength)];
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertSlot.innerHTML = '';
+      btn.disabled = true; btn.textContent = 'Bezig...';
+      try {
+        await NEB.post('/api/auth/register', {
+          firstName: form.firstName.value.trim(),
+          lastName: form.lastName.value.trim(),
+          email: form.email.value.trim(),
+          password: form.password.value
+        });
+        form.reset();
+        alertSlot.innerHTML = `<div class="alert alert-success">
+          <strong>Account aangemaakt!</strong> Controleer je e-mail voor een verificatielink. Je kan direct inloggen, maar je hebt de verificatie nodig om te kunnen bestellen.
+        </div>`;
+        btn.textContent = 'Klaar';
+      } catch (err) {
+        alertSlot.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        btn.disabled = false; btn.textContent = 'Account aanmaken';
+      }
+    });
+  </script>
+</body>
+</html>

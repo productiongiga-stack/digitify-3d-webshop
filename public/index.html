@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEBULOUS - Custom kleding & printproducten</title>
+    <meta name="description" content="Ontwerp je eigen custom kleding en promotiemateriaal met live preview. Upload je design en bestel direct online.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="NEBULOUS - Custom kleding & printproducten">
+    <meta property="og:description" content="Ontwerp je eigen custom kleding en promotiemateriaal met live preview. Upload je design en bestel direct online.">
+    <meta property="og:image" content="/assets/tshirt_mockup.png">
+    <meta property="og:url" content="/">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="NEBULOUS - Custom kleding & printproducten">
+    <meta name="twitter:description" content="Ontwerp je eigen custom kleding en promotiemateriaal met live preview. Upload je design en bestel direct online.">
+    <meta name="twitter:image" content="/assets/tshirt_mockup.png">
+    <script type="application/ld+json" id="seoJsonLd">{"@context":"https://schema.org","@type":"Product","name":"Custom kleding & printproducten","description":"Ontwerp je eigen custom kleding en promotiemateriaal met live preview.","brand":{"@type":"Brand","name":"NEBULOUS"},"image":["/assets/tshirt_mockup.png"],"offers":{"@type":"AggregateOffer","priceCurrency":"EUR","lowPrice":"34.95","availability":"https://schema.org/InStock"},"url":"/"}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+    <!-- Ambient background -->
+    <div class="ambient-bg">
+        <div class="ambient-orb orb-1"></div>
+        <div class="ambient-orb orb-2"></div>
+        <div class="ambient-orb orb-3"></div>
+    </div>
+    <div class="cursor-glow" id="cursorGlow"></div>
+    <div class="particles" id="particles"></div>
+
+    <!-- Navigation -->
+    <nav class="nav" id="nav">
+        <div class="nav-inner">
+            <a href="/" class="logo">
+                <span class="logo-mark">&#x2726;</span>
+                <span>NEBULOUS</span>
+            </a>
+            <div class="nav-links">
+                <a href="/shop" class="nav-link">Shop</a>
+                <a href="/designer" class="nav-link active">Designer</a>
+                <a href="/prijzen" class="nav-link">Prijzen</a>
+                <a href="/maattabel" class="nav-link">Maattabel</a>
+                <a href="/support" class="nav-link">Support</a>
+            </div>
+            <div class="nav-right" style="display:flex;gap:.5rem;align-items:center">
+                <div class="nav-price-tag">
+                    Vanaf <strong id="navBasePrice">&euro;34,95</strong>
+                </div>
+                <span data-theme-switch></span>
+                <span data-cart-icon></span>
+                <div class="nav-user-slot" data-nav-user style="display:flex;gap:.5rem;align-items:center"></div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ============================================
+         HERO - Full viewport intro
+         ============================================ -->
+    <section class="hero">
+        <div class="hero-video-wrap" id="heroVideoWrap" hidden>
+            <div class="hero-video-overlay"></div>
+            <iframe id="heroVideoFrame" class="hero-video-frame"
+                frameborder="0" allow="autoplay; encrypted-media" allowfullscreen
+                loading="lazy"></iframe>
+        </div>
+        <div class="hero-inner">
+            <div class="hero-badge">
+                <span class="badge-dot"></span>
+                Upload &middot; Preview &middot; Bestel
+            </div>
+            <h1 class="hero-title">
+                <span id="heroTitle1">Ontwerp jouw</span>
+                <span class="gradient-text" id="heroTitle2">marketingmateriaal</span>
+            </h1>
+            <p class="hero-sub" id="heroSubtitle">
+                Upload je design, pas aan en bestel direct. Van banners tot beachflags en promotional items — binnen 3 werkdagen geleverd.
+            </p>
+            <a href="/designer#designer" class="hero-cta">
+                <span>Start met ontwerpen</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7"/><path d="M7 7h10v10"/></svg>
+            </a>
+        </div>
+        <div class="hero-scroll-hint">
+            <div class="scroll-line"></div>
+            <span>Scroll</span>
+        </div>
+    </section>
+
+    <!-- ============================================
+         PRODUCTS - Product picker
+         ============================================ -->
+    <section class="products-section" id="products">
+        <div class="products-inner">
+            <span class="section-eyebrow">Stap 1 &mdash; Kies je product</span>
+            <h2 class="section-title">Wat wil je <span class="gradient-text">bedrukken?</span></h2>
+            <p class="products-lead">Selecteer een product hieronder — de designer opent direct met jouw keuze klaarstaan.</p>
+            <div class="hp-products-grid" id="homepageProducts">
+                <div class="hp-product-skeleton"></div>
+                <div class="hp-product-skeleton"></div>
+                <div class="hp-product-skeleton"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         DESIGNER - Main app section
+         ============================================ -->
+    <section class="designer-section" id="designer">
+        <div class="designer-header">
+            <span class="section-eyebrow">Product Designer</span>
+            <h2 class="section-title">Creëer jouw <span class="gradient-text">unieke</span> product</h2>
+        </div>
+
+        <div class="designer-app">
+            <!-- Left: Controls panel -->
+            <div class="controls-panel">
+                <!-- Step indicator -->
+                <div class="steps">
+                    <div class="step active" data-step="1">
+                        <div class="step-num">1</div>
+                        <span>Upload</span>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" data-step="2">
+                        <div class="step-num">2</div>
+                        <span>Branding aanpassen</span>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" data-step="3">
+                        <div class="step-num">3</div>
+                        <span>Bestellen</span>
+                    </div>
+                </div>
+
+                <!-- Panel 1: Upload -->
+                <div class="panel" id="panelUpload">
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-icon">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <h3>Sleep je ontwerp hierheen</h3>
+                        <p>of klik om een bestand te kiezen</p>
+                        <span class="upload-formats">PNG, JPG, SVG &mdash; max 10MB</span>
+                        <input type="file" id="fileInput" accept="image/*" multiple hidden>
+                    </div>
+
+                    <!-- Upload list (multiple designs) -->
+                    <div class="upload-list" id="uploadList" aria-label="Geüploade designs" hidden></div>
+                </div>
+
+                <!-- Panel 2: Customize -->
+                <div class="panel hidden" id="panelCustomize">
+                    <div class="active-design" id="activeDesignLabel">Actief ontwerp: <strong>—</strong></div>
+                    <div class="active-product-badge" id="activeProductBadge" aria-live="polite"></div>
+                    <div class="step2-layer-tools">
+                        <div class="step2-layer-head">
+                            <strong>Designs</strong>
+                            <button class="btn-tertiary btn-mini" id="btnAddMoreFiles" type="button">Bestanden toevoegen</button>
+                        </div>
+                        <div class="step2-layer-list" id="step2LayerList" aria-label="Design selectie stap 2"></div>
+                    </div>
+                    <!-- T-shirt color -->
+                    <div class="control-group">
+                        <label class="control-label">Kleur</label>
+                        <div class="color-options" id="colorOptions">
+    <button class="color-swatch active" data-color="#0b0b0b" data-name="Zwart" style="background:#0b0b0b" title="Zwart"></button>
+    <button class="color-swatch" data-color="#f2f2f2" data-name="Wit" style="background:#f2f2f2" title="Wit"></button>
+    <button class="color-swatch" data-color="#6b6b6b" data-name="Grijs" style="background:#6b6b6b" title="Grijs"></button>
+</div>
+                        <span class="color-name" id="colorName">Zwart</span>
+                    </div>
+
+                    <!-- Design position -->
+                    <div class="control-group">
+                        <label class="control-label">Positie</label>
+                        <div class="position-grid" id="positionGrid">
+                            <button class="pos-btn" data-pos="top" title="Boven">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/></svg>
+                            </button>
+                            <button class="pos-btn active" data-pos="center" title="Midden">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                            </button>
+                            <button class="pos-btn" data-pos="leftchest" title="Borst links">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    <circle cx="9" cy="10" r="1.2"/>
+                                </svg>
+                            </button>
+                            <button class="pos-btn" data-pos="rightchest" title="Borst rechts">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    <circle cx="15" cy="10" r="1.2"/>
+                                </svg>
+                            </button>
+                            <button class="pos-btn" data-pos="bottom" title="Onder">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+                            </button>
+                            <button class="pos-btn" data-pos="full" title="Volledig">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="6" y="6" width="12" height="12" rx="1" opacity="0.4"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+
+                    <!-- Vertical fine-tuning -->
+                    <div class="control-group">
+                        <label class="control-label">Verticale positie <span class="range-val" id="vOffsetVal">0px</span></label>
+                        <input type="range" class="range-input" id="vOffsetRange" min="-100" max="100" value="0">
+                    </div>
+
+                    <!-- Horizontal fine-tuning -->
+                    <div class="control-group">
+                        <label class="control-label">Horizontale positie <span class="range-val" id="xOffsetVal">0px</span></label>
+                        <input type="range" class="range-input" id="xOffsetRange" min="-100" max="100" value="0">
+                    </div>
+
+                    <!-- Design scale -->
+                    <div class="control-group">
+                        <label class="control-label">Grootte <span class="range-val" id="scaleVal">100%</span></label>
+                        <input type="range" class="range-input" id="scaleRange" min="30" max="150" value="100">
+                    </div>
+
+                    <!-- Size selector -->
+                    <div class="control-group">
+                        <label class="control-label">Maat</label>
+                        <div class="sizes" id="sizeSelector">
+                            <button class="size-btn" data-size="XS">XS</button>
+                            <button class="size-btn" data-size="S">S</button>
+                            <button class="size-btn active" data-size="M">M</button>
+                            <button class="size-btn" data-size="L">L</button>
+                            <button class="size-btn" data-size="XL">XL</button>
+                            <button class="size-btn" data-size="XXL">XXL</button>
+                        </div>
+                        <p class="size-meta" id="sizeMeta">52 x 71 cm · 520 x 710 mm</p>
+                    </div>
+
+                    <!-- Quantity + Reset -->
+                    <div class="control-group">
+                        <label class="control-label">Aantal</label>
+                        <div class="qty-reset-grid">
+                            <div class="qty-wrap">
+                                <div class="qty-control">
+                                    <button class="qty-btn" id="qtyMinus" type="button" aria-label="Aantal verminderen">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    </button>
+                                    <span class="qty-value" id="qtyValue">1</span>
+                                    <button class="qty-btn" id="qtyPlus" type="button" aria-label="Aantal verhogen">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button class="btn-tertiary" id="btnResetActive" type="button" title="Reset actieve ontwerp">
+                                Reset actief ontwerp
+                            </button>
+                        </div>
+                    </div>
+</div>
+
+                <!-- Panel 3: Order -->
+                <div class="panel hidden" id="panelOrder">
+                    <div class="order-summary">
+                        <h3>Bestelling</h3>
+                        <div class="order-line">
+                            <span>Kleur</span>
+                            <span id="orderColor">Zwart</span>
+                        </div>
+                        <div class="order-line">
+                            <span>Product</span>
+                            <span id="orderProduct">T-shirt</span>
+                        </div>
+                        <div class="order-line">
+                            <span>Maat</span>
+                            <span id="orderSize">M</span>
+                        </div>
+                        <div class="order-line">
+                            <span>Aantal</span>
+                            <span id="orderQty">1</span>
+                        </div>
+                        <div class="order-line" id="orderExtrasRow" style="display:none">
+                            <span>Extra designs</span>
+                            <span id="orderExtras">&euro;0,00</span>
+                        </div>
+                        <div class="order-divider"></div>
+                        <div class="order-line">
+                            <span>Subtotaal</span>
+                            <span id="orderSubtotal">&euro;34,95</span>
+                        </div>
+                        <div class="order-line">
+                            <span>Verzending</span>
+                            <span class="free-tag">Gratis</span>
+                        </div>
+                        <div class="order-divider"></div>
+                        <div class="order-line total">
+                            <span>Totaal</span>
+                            <span id="orderTotal">&euro;34,95</span>
+                        </div>
+                    </div>
+
+                    <div class="order-preview-actions">
+                        <button class="btn-secondary" id="btnPreviewProduct" type="button">
+                            Product Bekijken
+                        </button>
+                    </div>
+
+                    <!-- Opmerkingen (per item) -->
+                    <div class="control-group remarks-group" id="remarksGroup">
+                        <label class="control-label">Opmerkingen</label>
+                        <textarea class="remarks-textarea" id="remarksInput" rows="3" placeholder="Opmerkingen over dit ontwerp (optioneel)"></textarea>
+                    </div>
+                </div>
+
+                <!-- Navigation buttons -->
+                <div class="panel-nav">
+                    <button class="btn-secondary hidden" id="btnBack">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="19 12 5 12"/><polyline points="12 19 5 12 12 5"/></svg>
+                        Terug
+                    </button>
+                    <button class="btn-primary" id="btnNext" disabled>
+                        <span id="btnNextText">Upload eerst je design</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 12 19 12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right: 3D T-shirt preview -->
+            <div class="preview-panel">
+                <div class="preview-canvas" id="previewCanvas">
+                    <div class="canvas-glow"></div>
+                    <div class="tshirt-3d tshirt-mockup" id="tshirt3d" aria-label="T-shirt preview">
+                        <img class="mockup-base" id="mockupBase" src="assets/tshirt_mockup.png" alt="T-shirt mockup">
+                        <div class="shirt-tint-overlay" id="shirtTintOverlay" aria-hidden="true"></div>
+                        <div class="mockup-placeholder" id="designPlaceholder">
+                            <div class="ph-box">
+                                <div class="ph-icon"></div>
+                                <div class="ph-text">Jouw design verschijnt hier</div>
+                            </div>
+                        </div>
+                        <div class="layer-stack" id="layerStack" aria-label="Design previews"></div>
+                        <img class="design-overlay" id="designImage" src="" alt="Jouw design" style="display:none">
+</div>
+                    <div class="canvas-hint" id="canvasHint">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                        Sleep om te draaien
+                    </div>
+                    <div class="design-drag-hint hidden" id="designDragHint">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+                        Sleep logo om te positioneren
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         HOW IT WORKS
+         ============================================ -->
+    <section class="how-section" id="how">
+        <div class="how-inner">
+            <span class="section-eyebrow">Hoe het werkt</span>
+            <h2 class="section-title">Van idee naar <span class="gradient-text">marketingmateriaal</span> in 3 stappen</h2>
+            <div class="how-grid">
+                <div class="how-card">
+                    <div class="how-number">01</div>
+                    <div class="how-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <h3>Upload</h3>
+                    <p>Kies een afbeelding van je computer. PNG, JPG of SVG van je logo of ontwerp.</p>
+                </div>
+                <div class="how-card">
+                    <div class="how-number">02</div>
+                    <div class="how-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </div>
+                    <h3>Aanpassen</h3>
+                    <p>Kies materiaal, kleur, positie en grootte. Bekijk live in de designer.</p>
+                </div>
+                <div class="how-card">
+                    <div class="how-number">03</div>
+                    <div class="how-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4a2 2 0 012 2v6a2 2 0 01-2 2h-4"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                    </div>
+                    <h3>Bestellen</h3>
+                    <p>Ontvang je producten binnen 3 werkdagen geleverd.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         FEATURES
+         ============================================ -->
+    <section class="features-section">
+        <div class="features-inner">
+            <div class="features-grid">
+                <div class="feature-card">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <div>
+                        <h4>Premium producten</h4>
+                        <p>Textiel, banners, beachflags en meer — voor elk marketing doel</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                    <div>
+                        <h4>Professionele afdruk</h4>
+                        <p>DTG voor textiel, UV-print voor banners en beachflags</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4a2 2 0 012 2v6a2 2 0 01-2 2h-4"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                    <div>
+                        <h4>Gratis verzending</h4>
+                        <p>Bezorgd binnen 3 werkdagen in heel Nederland</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                    <div>
+                        <h4>30 dagen retour</h4>
+                        <p>Niet tevreden? Stuur gratis terug, geen vragen</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         REVIEWS
+         ============================================ -->
+    <section class="reviews-section" id="reviews">
+        <div class="reviews-inner">
+            <span class="section-eyebrow">Klanten aan het woord</span>
+            <h2 class="section-title">Meer dan <span class="gradient-text">2.400+</span> tevreden klanten</h2>
+            <div class="reviews-score">
+                <span class="reviews-score-num">4.9</span>
+                <span class="reviews-score-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+                <span class="reviews-score-label">Gemiddeld op 2.400+ bestellingen</span>
+            </div>
+            <div class="reviews-grid">
+                <div class="review-card">
+                    <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                    <p>"Mijn eigen artwork op een shirt! De print is scherp en de kleuren kloppen perfect."</p>
+                    <div class="review-author">
+                        <div class="author-avatar">MK</div>
+                        <div><strong>Maarten K.</strong><span>Geverifieerde aankoop</span></div>
+                    </div>
+                </div>
+                <div class="review-card">
+                    <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                    <p>"Super makkelijk te gebruiken. Van upload naar bestelling in 2 minuten. Top kwaliteit!"</p>
+                    <div class="review-author">
+                        <div class="author-avatar">SV</div>
+                        <div><strong>Sophie V.</strong><span>Geverifieerde aankoop</span></div>
+                    </div>
+                </div>
+                <div class="review-card">
+                    <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                    <p>"Al 10x gewassen, print ziet er nog steeds als nieuw uit. Besteld als cadeau, groot succes!"</p>
+                    <div class="review-author">
+                        <div class="author-avatar">JB</div>
+                        <div><strong>Jesse B.</strong><span>Geverifieerde aankoop</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================
+         FOOTER
+         ============================================ -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-top">
+                <div class="footer-brand">
+                    <div class="footer-kicker">Premium Print Studio</div>
+                    <span class="logo-mark">&#x2726;</span> NEBULOUS
+                    <p>Professioneel marketingmateriaal, gemaakt voor jou.</p>
+                </div>
+                <div class="footer-cols">
+                    <div>
+                        <h5>Shop</h5>
+                        <a href="/shop">Shop</a>
+                        <a href="/designer">Designer</a>
+                        <a href="/prijzen">Prijzen</a>
+                        <a href="/maattabel">Maattabel</a>
+                    </div>
+                    <div>
+                        <h5>Support</h5>
+                        <a href="/support">Support</a>
+                        <a href="/faq">FAQ</a>
+                        <a href="/contact">Contact</a>
+                        <a href="/verzending">Verzending</a>
+                    </div>
+                    <div>
+                        <h5>Legal</h5>
+                        <a href="/legal">Legal</a>
+                        <a href="/privacy">Privacy</a>
+                        <a href="/voorwaarden">Voorwaarden</a>
+                        <a href="/retourneren">Retourneren</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Nebulous. Alle rechten voorbehouden.</p>
+                <div class="footer-meta-links">
+                    <a href="/privacy">Privacy</a>
+                    <a href="/voorwaarden">Voorwaarden</a>
+                    <a href="/contact">Contact</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        <span id="toastMsg">Opgeslagen!</span>
+    </div>
+
+    <!-- Order success modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h2>Toegevoegd aan winkelmand</h2>
+            <p id="modalOrderText">Je ontwerp staat klaar. Voeg nog meer toe of ga direct afrekenen.</p>
+            <div class="modal-details">
+                <span>Levertijd: <strong>3 werkdagen</strong></span>
+            </div>
+            <a class="btn-secondary" href="/cart" style="display:inline-flex;justify-content:center;align-items:center;text-decoration:none">Naar winkelmand</a>
+            <button class="btn-primary modal-close" id="modalClose" type="button">
+                <span>Nieuw ontwerp</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Live project preview modal -->
+    <div class="modal-overlay preview-modal-overlay" id="productPreviewOverlay" aria-hidden="true">
+        <div class="product-preview-modal" id="productPreviewModal" role="dialog" aria-modal="true" aria-labelledby="productPreviewTitle">
+            <div class="product-preview-head">
+                <h3 id="productPreviewTitle">Project preview</h3>
+                <div class="product-preview-head-actions">
+                    <button class="btn-secondary btn-compact" id="btnPreviewFullscreen" type="button">Volledig scherm</button>
+                    <button class="btn-tertiary btn-compact" id="btnPreviewClose" type="button">Sluiten</button>
+                </div>
+            </div>
+            <div class="product-preview-body">
+                <div class="preview-canvas preview-canvas-modal" id="productPreviewCanvas">
+                    <div class="canvas-glow"></div>
+                    <div class="tshirt-3d tshirt-mockup preview-tshirt-static" id="productPreviewTshirt" aria-label="Live project preview">
+                        <img class="mockup-base" id="productPreviewMockupBase" src="assets/tshirt_mockup.png" alt="Product mockup">
+                        <div class="shirt-tint-overlay" id="productPreviewTint" aria-hidden="true"></div>
+                        <div class="mockup-placeholder" id="productPreviewPlaceholder">
+                            <div class="ph-box">
+                                <div class="ph-icon"></div>
+                                <div class="ph-text">Jouw design verschijnt hier</div>
+                            </div>
+                        </div>
+                        <div class="layer-stack" id="productPreviewLayerStack" aria-label="Project layers preview"></div>
+                    </div>
+                </div>
+                <div class="product-preview-meta" id="productPreviewMeta"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="app.js"></script>
+    <script src="designer-boot.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

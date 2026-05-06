@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — NEBULOUS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="/" class="logo"><span class="logo-mark">&#x2726;</span><span>NEBULOUS</span></a>
+      <div class="nav-links">
+        <a href="/designer" class="nav-link">Designer</a>
+        <a href="/admin" class="nav-link active">Instellingen</a>
+      </div>
+      <div class="nav-right" style="display:flex;gap:.5rem;align-items:center">
+        <span data-theme-switch></span>
+        <span data-cart-icon></span>
+        <span data-nav-user style="display:flex;gap:.5rem;align-items:center"></span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="app-shell">
+    <div class="app-main">
+      <div class="page-head">
+        <span class="page-eyebrow">Instellingen</span>
+        <h1 class="page-title">Instellingen &amp; Beheer</h1>
+        <p class="page-sub" id="welcome">Beheer bestellingen, klanten, facturatie en winkelinstellingen.</p>
+      </div>
+
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="orders">Bestellingen</button>
+        <button class="tab" data-tab="users" data-owner-only hidden>Klanten</button>
+        <button class="tab" data-tab="settings" data-owner-only hidden>Instellingen</button>
+        <button class="tab" data-tab="meldingen" data-owner-only hidden>🔔 Meldingen <span id="notifBadge" class="notif-badge" hidden></span></button>
+        <button class="tab" data-tab="audit" data-owner-only hidden>Audit log</button>
+      </div>
+
+      <section class="tab-panel active" id="panel-orders">
+        <div class="stats-grid" id="orderStats"></div>
+
+        <!-- Sub-tabs: Bestellingen / Facturen -->
+        <div class="orders-subtab-bar" id="ordersSubTabBar">
+          <button class="orders-subtab active" data-orders-subtab="orders">📦 Bestellingen</button>
+          <button class="orders-subtab" data-orders-subtab="invoices">🧾 Facturen <span id="invoiceBadge" class="notif-badge" hidden></span></button>
+        </div>
+
+        <!-- Bestellingen sub-panel -->
+        <div class="orders-subtab-panel active" id="orders-subpanel-orders">
+          <div class="toolbar" id="ordersToolbar">
+            <input type="search" id="orderQ" placeholder="Zoek op naam, e-mail of order #">
+            <span class="toolbar-sep"></span>
+            <select id="orderStatus">
+              <option value="">Alle statussen</option>
+              <option value="NEW">Nieuw</option>
+              <option value="APPROVED">Goedgekeurd</option>
+              <option value="APPROVED_AWAITING_PAYMENT">Goedgekeurd (wacht op betaling)</option>
+              <option value="PAYMENT_PENDING">Betaling in behandeling</option>
+              <option value="PAID">Betaald</option>
+              <option value="IN_PRODUCTION">In productie</option>
+              <option value="SHIPPED">Verzonden</option>
+              <option value="DELIVERED">Bezorgd</option>
+              <option value="CANCELLED">Geannuleerd</option>
+            </select>
+            <select id="orderInvoiceStatus">
+              <option value="">Alle facturen</option>
+              <option value="OPEN">Factuur open</option>
+              <option value="OVERDUE">Factuur overdue</option>
+              <option value="CONCEPT">Factuur concept</option>
+              <option value="DEFINITIVE">Factuur definitief</option>
+              <option value="PAID">Factuur betaald</option>
+              <option value="VOID">Factuur geannuleerd</option>
+            </select>
+            <select id="orderArchived">
+              <option value="ACTIVE">Actief</option>
+              <option value="DELETED">Archief</option>
+              <option value="ALL">Alles</option>
+            </select>
+            <a href="/api/admin/orders.csv" class="btn btn-ghost btn-sm">Export CSV</a>
+          </div>
+          <div class="bulkbar" id="ordersBulkBar" hidden>
+            <span class="bulkbar-count" id="ordersBulkCount">0 geselecteerd</span>
+            <select id="bulkOrderStatus">
+              <option value="">Kies bulkstatus…</option>
+              <option value="NEW">Nieuw</option>
+              <option value="APPROVED">Goedgekeurd</option>
+              <option value="APPROVED_AWAITING_PAYMENT">Goedgekeurd (wacht op betaling)</option>
+              <option value="PAYMENT_PENDING">Betaling in behandeling</option>
+              <option value="PAID">Betaald</option>
+              <option value="IN_PRODUCTION">In productie</option>
+              <option value="SHIPPED">Verzonden</option>
+              <option value="DELIVERED">Bezorgd</option>
+              <option value="CANCELLED">Geannuleerd</option>
+            </select>
+            <button class="btn btn-primary btn-sm" id="bulkApplyBtn">Toepassen</button>
+            <button class="btn btn-danger btn-sm" id="bulkArchiveBtn">Archiveren geselecteerde</button>
+            <button class="btn btn-ghost btn-sm" id="bulkClearBtn">Wissen</button>
+          </div>
+          <div id="ordersWrap"></div>
+          <div class="pager" id="pager"></div>
+          <div id="orderDetailWrap" style="margin-top:2rem"></div>
+        </div>
+
+        <!-- Facturen sub-panel -->
+        <div class="orders-subtab-panel" id="orders-subpanel-invoices">
+          <div id="invoiceOverview"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-users">
+        <div id="pendingWrap" style="margin-bottom:1.5rem"></div>
+        <div id="usersWrap"></div>
+      </section>
+
+      <section class="tab-panel" id="panel-settings">
+        <div class="section-actions">
+          <p class="muted compact" style="margin:0">Wijzigingen gaan direct live op de website.</p>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <a href="/" target="_blank" class="btn btn-ghost btn-sm">Open homepage</a>
+            <button class="btn btn-ghost btn-sm" id="backupBtn">Backup downloaden</button>
+            <button class="btn btn-danger btn-sm" id="restoreBackupBtn">Herstel uit upload</button>
+            <input type="file" id="restoreBackupFile" accept=".sqlite,.db,.sqlite3,application/octet-stream" hidden>
+          </div>
+        </div>
+        <div class="settings-tabs" id="settingsTabs">
+          <button class="stab active" data-stab="algemeen">&#x1F3E0; Algemeen</button>
+          <button class="stab" data-stab="producten">&#x1F4E6; Producten &amp; Stijl</button>
+          <button class="stab" data-stab="email">&#x2709;&#xFE0F; E-mail &amp; SMTP</button>
+          <button class="stab" data-stab="email-templates">&#x1F4E8; E-mail templates</button>
+          <button class="stab" data-stab="documenten">&#x1F4C4; Documenten</button>
+          <button class="stab" data-stab="thema">&#x2728; Thema &amp; Branding</button>
+          <button class="stab" data-stab="conversie">&#x1F4CA; Conversie</button>
+          <button class="stab" data-stab="betalingen">&#x1F4B3; Betalingen</button>
+        </div>
+        <div id="settingsWrap"></div>
+      </section>
+
+      <section class="tab-panel" id="panel-meldingen"></section>
+
+      <section class="tab-panel" id="panel-audit">
+        <div class="toolbar" id="auditToolbar">
+          <input type="search" id="auditQ" placeholder="Zoek op samenvatting, gebruiker, actie...">
+          <span class="toolbar-sep"></span>
+          <select id="auditAction">
+            <option value="">Alle acties</option>
+          </select>
+        </div>
+        <div id="auditWrap"></div>
+        <div class="pager" id="auditPager"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>

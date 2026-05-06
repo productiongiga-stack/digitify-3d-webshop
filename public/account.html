@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Account — NEBULOUS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="ambient-bg">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="/" class="logo"><span class="logo-mark">&#x2726;</span><span>NEBULOUS</span></a>
+      <div class="nav-links">
+        <a href="/designer" class="nav-link">Designer</a>
+        <a href="/dashboard" class="nav-link">Dashboard</a>
+        <a href="/account" class="nav-link active">Account</a>
+      </div>
+      <div class="nav-right" style="display:flex;gap:.5rem;align-items:center">
+        <span data-theme-switch></span>
+        <span data-cart-icon></span>
+        <span data-nav-user style="display:flex;gap:.5rem;align-items:center"></span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="app-shell">
+    <div class="app-main medium">
+      <div class="page-head">
+        <span class="page-eyebrow">Instellingen</span>
+        <h1 class="page-title">Mijn account</h1>
+        <p class="page-sub">Beheer je gegevens, leveradres, beveiliging en privacy.</p>
+      </div>
+
+      <div class="account-tabs">
+        <button class="acc-tab active" data-tab="profiel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          Profiel
+        </button>
+        <button class="acc-tab" data-tab="beveiliging">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Beveiliging
+        </button>
+        <button class="acc-tab" data-tab="twofa">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V7L12 2z"/></svg>
+          2FA
+        </button>
+        <button class="acc-tab" data-tab="privacy">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Privacy
+        </button>
+      </div>
+
+      <div class="acc-panel active" id="panel-profiel">
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Persoonlijke gegevens</h2>
+            <p class="card-sub">Je naam, e-mailadres en leveradres.</p>
+          </div>
+          <form id="profileForm" class="form-stack">
+            <div class="form-grid-2">
+              <div class="field"><label>Voornaam</label><input id="firstName" autocomplete="given-name"></div>
+              <div class="field"><label>Achternaam</label><input id="lastName" autocomplete="family-name"></div>
+            </div>
+            <div class="field">
+              <label>E-mailadres</label>
+              <input id="email" disabled style="opacity:.55;cursor:not-allowed">
+              <span class="hint">E-mailadres kan niet worden gewijzigd.</span>
+            </div>
+            <div class="field"><label>Telefoon <span class="field-opt">optioneel</span></label><input id="phone" autocomplete="tel" placeholder="+32 ..."></div>
+            <div class="field"><label>Straat &amp; huisnummer</label><input id="address" autocomplete="street-address" placeholder="Voorbeeldstraat 12"></div>
+            <div class="form-grid-2">
+              <div class="field"><label>Postcode</label><input id="postcode" autocomplete="postal-code" placeholder="2000"></div>
+              <div class="field"><label>Stad</label><input id="city" autocomplete="address-level2" placeholder="Antwerpen"></div>
+            </div>
+            <div class="form-foot">
+              <button class="btn btn-primary" type="submit">Wijzigingen opslaan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="acc-panel" id="panel-beveiliging">
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Wachtwoord wijzigen</h2>
+            <p class="card-sub">Kies een sterk wachtwoord van minstens 6 tekens.</p>
+          </div>
+          <form id="pwForm" class="form-stack">
+            <div class="field"><label>Huidig wachtwoord</label><input id="curPw" type="password" autocomplete="current-password" required></div>
+            <div class="form-grid-2">
+              <div class="field"><label>Nieuw wachtwoord</label><input id="newPw" type="password" autocomplete="new-password" minlength="6" required></div>
+              <div class="field"><label>Bevestig nieuw wachtwoord</label><input id="newPw2" type="password" autocomplete="new-password" minlength="6" required></div>
+            </div>
+            <div class="pwd-strength" id="pwdStrengthSec">
+              <div class="pwd-strength-bar" id="ss1"></div>
+              <div class="pwd-strength-bar" id="ss2"></div>
+              <div class="pwd-strength-bar" id="ss3"></div>
+            </div>
+            <div id="pwAlert"></div>
+            <div class="form-foot">
+              <button class="btn btn-primary" type="submit">Wachtwoord wijzigen</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="acc-panel" id="panel-twofa">
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Twee-factor authenticatie</h2>
+            <p class="card-sub">Beveilig je account met een TOTP-authenticator-app.</p>
+          </div>
+          <div class="twofa-status-row">
+            <div id="twofaStatus" class="muted compact">Status laden...</div>
+            <div id="twofaActions" style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-ghost btn-sm" id="twofaSetupBtn" type="button">Start 2FA setup</button>
+              <button class="btn btn-danger btn-sm" id="twofaDisableBtn" type="button" hidden>Deactiveer 2FA</button>
+            </div>
+          </div>
+          <div id="twofaAlert"></div>
+          <div id="twofaSetupWrap" hidden style="margin-top:1.25rem">
+            <div class="alert alert-info" style="margin-bottom:.8rem">
+              Scan de QR-code met Google Authenticator, 1Password of Authy, en bevestig met een 6-cijferige code.
+            </div>
+            <div class="twofa-setup-grid">
+              <img id="twofaQrImg" alt="2FA QR code" class="twofa-qr">
+              <div>
+                <div class="field">
+                  <label>Handmatige sleutel</label>
+                  <input id="twofaManualKey" readonly>
+                </div>
+                <div class="field">
+                  <label>Verificatiecode</label>
+                  <input id="twofaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123 456" style="letter-spacing:.15em;font-size:1.1rem">
+                </div>
+                <div style="display:flex;justify-content:flex-end">
+                  <button class="btn btn-primary btn-sm" id="twofaEnableBtn" type="button">Activeer 2FA</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="twofaDisableWrap" hidden style="margin-top:1rem">
+            <div class="alert alert-info" style="margin-bottom:.8rem">
+              Bevestig met een actuele 6-cijferige 2FA-code om 2FA te deactiveren.
+            </div>
+            <div class="form-grid-2">
+              <div class="field">
+                <label>2FA-code voor deactivatie</label>
+                <input id="twofaDisableCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123 456" style="letter-spacing:.15em;font-size:1rem">
+              </div>
+              <div style="display:flex;align-items:flex-end;justify-content:flex-end">
+                <button class="btn btn-danger btn-sm" id="twofaDisableConfirmBtn" type="button">Bevestig deactivatie</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="acc-panel" id="panel-privacy">
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title">Privacy &amp; data-export</h2>
+            <p class="card-sub">Download een volledige kopie van jouw gegevens (GDPR).</p>
+          </div>
+          <div class="privacy-export-box">
+            <div class="peb-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+            </div>
+            <div>
+              <h3 style="font-size:.95rem;font-weight:600;margin:0 0 .25rem">Jouw data-export</h3>
+              <p class="muted compact">Bevat je accountgegevens, alle orders, geüploade designs en betalingshistoriek als ZIP-bestand.</p>
+            </div>
+          </div>
+          <div id="gdprExportAlert" style="margin:.75rem 0 0"></div>
+          <div class="form-foot">
+            <button class="btn btn-ghost" id="gdprExportBtn" type="button">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:.35rem"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download al mijn data (ZIP)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+  <script>
+    // Tab navigation
+    const tabs = document.querySelectorAll('.acc-tab');
+    const panels = document.querySelectorAll('.acc-panel');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        tabs.forEach(t => t.classList.toggle('active', t === tab));
+        panels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + target));
+        history.replaceState(null, '', '#' + target);
+      });
+    });
+    // Restore tab from hash
+    const hash = location.hash.replace('#', '');
+    if (hash) {
+      const t = document.querySelector(`.acc-tab[data-tab="${hash}"]`);
+      if (t) t.click();
+    }
+
+    (async () => {
+      const user = await NEB.requireAuth();
+      if (!user) return;
+      window.NEB_USER = user;
+      await NEB.paintNav();
+
+      ['firstName','lastName','email','phone','address','postcode','city'].forEach(k => {
+        const el = document.getElementById(k);
+        if (el) el.value = user[k] || '';
+      });
+
+      // Password strength on security tab
+      const newPwInput = document.getElementById('newPw');
+      const sBars = [document.getElementById('ss1'), document.getElementById('ss2'), document.getElementById('ss3')];
+      newPwInput?.addEventListener('input', () => {
+        const v = newPwInput.value;
+        const strength = (v.length >= 8 ? 1 : 0) + (/[^a-zA-Z0-9]/.test(v) ? 1 : 0) + (/\d/.test(v) ? 1 : 0);
+        const cls = ['', 'weak', 'ok', 'strong'];
+        sBars.forEach((b, i) => {
+          b.className = 'pwd-strength-bar';
+          if (v.length > 0 && i < Math.max(1, strength)) b.classList.add(cls[Math.max(1, strength)]);
+        });
+      });
+
+      const twofaStatusEl = document.getElementById('twofaStatus');
+      const twofaAlert = document.getElementById('twofaAlert');
+      const twofaSetupBtn = document.getElementById('twofaSetupBtn');
+      const twofaSetupWrap = document.getElementById('twofaSetupWrap');
+      const twofaQrImg = document.getElementById('twofaQrImg');
+      const twofaManualKey = document.getElementById('twofaManualKey');
+      const twofaCode = document.getElementById('twofaCode');
+      const twofaEnableBtn = document.getElementById('twofaEnableBtn');
+      const twofaDisableBtn = document.getElementById('twofaDisableBtn');
+      const twofaDisableWrap = document.getElementById('twofaDisableWrap');
+      const twofaDisableCode = document.getElementById('twofaDisableCode');
+      const twofaDisableConfirmBtn = document.getElementById('twofaDisableConfirmBtn');
+      const gdprExportBtn = document.getElementById('gdprExportBtn');
+      const gdprExportAlert = document.getElementById('gdprExportAlert');
+      const setup2faQuery = new URLSearchParams(location.search).get('setup2fa');
+
+      function clearTwoFactorSetupArtifacts() {
+        twofaSetupWrap.hidden = true;
+        twofaCode.value = '';
+        twofaManualKey.value = '';
+        twofaQrImg.removeAttribute('src');
+      }
+      function hideTwoFactorDisableWrap() {
+        twofaDisableWrap.hidden = true;
+        twofaDisableCode.value = '';
+      }
+
+      async function refreshTwoFactorStatus() {
+        const s = await NEB.get('/api/me/2fa/status');
+        if (s.enabled) {
+          twofaStatusEl.innerHTML = `<span class="pill pill-active">&#x2713; 2FA actief</span>`;
+          twofaSetupBtn.textContent = '2FA opnieuw instellen';
+          twofaDisableBtn.hidden = !!s.requiredForRole;
+          if (s.requiredForRole) {
+            twofaAlert.innerHTML = `<div class="alert alert-info">2FA is verplicht voor admin-accounts en kan niet gedeactiveerd worden.</div>`;
+          }
+          clearTwoFactorSetupArtifacts();
+        } else if (s.setupRequired) {
+          twofaStatusEl.innerHTML = `<span class="pill pill-pending">2FA verplicht voor ${user.role}</span>`;
+          twofaSetupBtn.textContent = '2FA verplicht instellen';
+          twofaDisableBtn.hidden = true;
+          if (setup2faQuery) {
+            twofaAlert.innerHTML = `<div class="alert alert-error">Je moet eerst 2FA activeren voordat je verder kan als ${user.role}.</div>`;
+          }
+        } else {
+          twofaStatusEl.innerHTML = `<span class="pill pill-pending">2FA niet actief</span>`;
+          twofaSetupBtn.textContent = 'Start 2FA setup';
+          twofaDisableBtn.hidden = true;
+        }
+        hideTwoFactorDisableWrap();
+      }
+
+      twofaSetupBtn.addEventListener('click', async () => {
+        twofaAlert.innerHTML = '';
+        hideTwoFactorDisableWrap();
+        try {
+          const data = await NEB.post('/api/me/2fa/setup', {});
+          twofaQrImg.src = data.qrDataUrl;
+          twofaManualKey.value = data.manualKey || '';
+          twofaCode.value = '';
+          twofaSetupWrap.hidden = false;
+          twofaCode.focus();
+        } catch (err) {
+          twofaAlert.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        }
+      });
+
+      twofaEnableBtn.addEventListener('click', async () => {
+        twofaAlert.innerHTML = '';
+        const code = (twofaCode.value || '').replace(/\s/g, '');
+        if (!/^\d{6}$/.test(code)) {
+          twofaAlert.innerHTML = `<div class="alert alert-error">Vul een geldige 6-cijferige code in.</div>`;
+          return;
+        }
+        try {
+          await NEB.post('/api/me/2fa/enable', { code });
+          clearTwoFactorSetupArtifacts();
+          await refreshTwoFactorStatus();
+          twofaAlert.innerHTML = `<div class="alert alert-success">2FA is geactiveerd.</div>`;
+          const next = new URLSearchParams(location.search).get('next');
+          if (setup2faQuery && next) setTimeout(() => { location.href = next; }, 500);
+        } catch (err) {
+          twofaAlert.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        }
+      });
+
+      twofaDisableBtn.addEventListener('click', () => {
+        twofaAlert.innerHTML = '';
+        twofaDisableWrap.hidden = !twofaDisableWrap.hidden;
+        if (!twofaDisableWrap.hidden) twofaDisableCode.focus();
+      });
+
+      twofaDisableConfirmBtn.addEventListener('click', async () => {
+        twofaAlert.innerHTML = '';
+        const code = (twofaDisableCode.value || '').replace(/\s/g, '');
+        if (!/^\d{6}$/.test(code)) {
+          twofaAlert.innerHTML = `<div class="alert alert-error">Vul een geldige 6-cijferige code in.</div>`;
+          return;
+        }
+        try {
+          await NEB.post('/api/me/2fa/disable', { code });
+          hideTwoFactorDisableWrap();
+          clearTwoFactorSetupArtifacts();
+          await refreshTwoFactorStatus();
+          twofaAlert.innerHTML = `<div class="alert alert-success">2FA is gedeactiveerd.</div>`;
+        } catch (err) {
+          twofaAlert.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        }
+      });
+
+      document.getElementById('profileForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = 'Opslaan...';
+        try {
+          await NEB.put('/api/me/profile', {
+            firstName: document.getElementById('firstName').value.trim(),
+            lastName: document.getElementById('lastName').value.trim(),
+            phone: document.getElementById('phone').value.trim(),
+            address: document.getElementById('address').value.trim(),
+            postcode: document.getElementById('postcode').value.trim(),
+            city: document.getElementById('city').value.trim()
+          });
+          NEB.toast('Profiel opgeslagen', 'success');
+        } catch (err) { NEB.toast(err.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = 'Wijzigingen opslaan'; }
+      });
+
+      const pwAlert = document.getElementById('pwAlert');
+      document.getElementById('pwForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        pwAlert.innerHTML = '';
+        const cur = document.getElementById('curPw').value;
+        const a = document.getElementById('newPw').value;
+        const b = document.getElementById('newPw2').value;
+        if (a !== b) { pwAlert.innerHTML = `<div class="alert alert-error">Nieuwe wachtwoorden komen niet overeen</div>`; return; }
+        const btn = e.target.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = 'Bezig...';
+        try {
+          await NEB.put('/api/me/password', { current: cur, next: a });
+          pwAlert.innerHTML = `<div class="alert alert-success">Wachtwoord gewijzigd</div>`;
+          e.target.reset();
+          document.querySelectorAll('#ss1,#ss2,#ss3').forEach(b => b.className = 'pwd-strength-bar');
+        } catch (err) {
+          pwAlert.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        } finally { btn.disabled = false; btn.textContent = 'Wachtwoord wijzigen'; }
+      });
+
+      gdprExportBtn?.addEventListener('click', async () => {
+        gdprExportBtn.disabled = true;
+        gdprExportAlert.innerHTML = `<div class="alert alert-info">Export wordt voorbereid...</div>`;
+        try {
+          const response = await fetch('/api/me/export-data', { credentials: 'same-origin' });
+          if (!response.ok) {
+            const ct = response.headers.get('content-type') || '';
+            let message = `HTTP ${response.status}`;
+            if (ct.includes('application/json')) {
+              const data = await response.json();
+              message = data?.error || message;
+            } else {
+              const text = await response.text();
+              if (text) message = text;
+            }
+            throw new Error(message);
+          }
+          const blob = await response.blob();
+          const cd = response.headers.get('content-disposition') || '';
+          const fileMatch = /filename="([^"]+)"/i.exec(cd);
+          const filename = (fileMatch && fileMatch[1]) ? fileMatch[1] : `gdpr-export-${Date.now()}.zip`;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = filename;
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          gdprExportAlert.innerHTML = `<div class="alert alert-success">Je data-export is gedownload.</div>`;
+        } catch (err) {
+          gdprExportAlert.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        } finally { gdprExportBtn.disabled = false; }
+      });
+
+      await refreshTwoFactorStatus();
+
+      // Auto-open 2FA tab if setup required
+      if (setup2faQuery) {
+        document.querySelector('.acc-tab[data-tab="twofa"]')?.click();
+      }
+    })();
+  </script>
+</body>
+</html>
