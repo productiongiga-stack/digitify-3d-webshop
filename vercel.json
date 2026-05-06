@@ -15,6 +15,18 @@
   ],
   "routes": [
     {
+      "src": "/uploads-signed",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/uploads/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/assets/(branding|products)/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
       "src": "/assets/(.*)",
       "dest": "/public/assets/$1"
     },

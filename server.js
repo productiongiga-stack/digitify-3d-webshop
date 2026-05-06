@@ -23,25 +23,26 @@ const Database = USE_PG ? null : require('better-sqlite3');
 
 const PORT = process.env.PORT || 3737;
 const ROOT = __dirname;
+const STORAGE_ROOT = USE_PG ? '/tmp' : ROOT;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const INDEX_HTML_PATH = path.join(PUBLIC_DIR, 'index.html');
-const BRAND_ASSET_DIR = path.join(PUBLIC_DIR, 'assets', 'branding');
-const PRODUCT_ASSET_DIR = path.join(PUBLIC_DIR, 'assets', 'products');
+const BRAND_ASSET_DIR = USE_PG
+  ? path.join(STORAGE_ROOT, 'uploads', 'assets', 'branding')
+  : path.join(PUBLIC_DIR, 'assets', 'branding');
+const PRODUCT_ASSET_DIR = USE_PG
+  ? path.join(STORAGE_ROOT, 'uploads', 'assets', 'products')
+  : path.join(PUBLIC_DIR, 'assets', 'products');
 const SESSION_REMEMBER_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
-const UPLOAD_DIR = path.join(ROOT, 'uploads');
+const UPLOAD_DIR = path.join(STORAGE_ROOT, 'uploads');
 const CART_DIR = path.join(UPLOAD_DIR, 'cart');
 const ORDER_DIR = path.join(UPLOAD_DIR, 'orders');
-const BACKUP_DIR = path.join(ROOT, 'data', 'backups');
+const BACKUP_DIR = path.join(STORAGE_ROOT, 'data', 'backups');
 
-// On Vercel (serverless), skip directory creation for non-/tmp paths
+// Storage setup: local uses project root, Vercel+PG uses /tmp.
 if (!USE_PG) {
   [UPLOAD_DIR, CART_DIR, ORDER_DIR, BACKUP_DIR, BRAND_ASSET_DIR, PRODUCT_ASSET_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 } else {
-  // Vercel: only /tmp is writable
-  const TMP_UPLOAD = path.join('/tmp', 'uploads');
-  const TMP_CART = path.join(TMP_UPLOAD, 'cart');
-  const TMP_ORDER = path.join(TMP_UPLOAD, 'orders');
-  [TMP_UPLOAD, TMP_CART, TMP_ORDER].forEach(d => fs.mkdirSync(d, { recursive: true }));
+  [UPLOAD_DIR, CART_DIR, ORDER_DIR, BRAND_ASSET_DIR, PRODUCT_ASSET_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 }
 
 const cartUpload = multer({
@@ -839,10 +840,18 @@ function publicAssetUrl(raw, fallback = '') {
 function resolvePublicAssetAbs(raw) {
   const normalized = normalizePublicAssetPath(raw);
   if (!normalized || /^https?:\/\//i.test(normalized)) return null;
-  const abs = path.resolve(PUBLIC_DIR, normalized);
-  if (!abs.startsWith(PUBLIC_DIR + path.sep) && abs !== PUBLIC_DIR) return null;
-  if (!fs.existsSync(abs)) return null;
-  return { rel: normalized, abs };
+  const staticAbs = path.resolve(PUBLIC_DIR, normalized);
+  if ((staticAbs.startsWith(PUBLIC_DIR + path.sep) || staticAbs === PUBLIC_DIR) && fs.existsSync(staticAbs)) {
+    return { rel: normalized, abs: staticAbs };
+  }
+  if (USE_PG && (normalized.startsWith('assets/branding/') || normalized.startsWith('assets/products/'))) {
+    const dynAbs = path.resolve(UPLOAD_DIR, normalized);
+    const allowedRoot = path.resolve(UPLOAD_DIR, 'assets');
+    if ((dynAbs.startsWith(allowedRoot + path.sep) || dynAbs === allowedRoot) && fs.existsSync(dynAbs)) {
+      return { rel: normalized, abs: dynAbs };
+    }
+  }
+  return null;
 }
 
 function sanitizeBrandColor(raw, fallback = '#0f172a') {
@@ -2767,7 +2776,7 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
     const optimized = await optimizeUploadedImage(previewFile.buffer, previewFile.mimetype || 'image/png', 'preview');
     const ext = optimized?.ext || extFromMime(previewFile.mimetype || 'image/png');
     previewPath = path.join('uploads', 'cart', String(itemId), `preview.${ext}`);
-    fs.writeFileSync(path.join(ROOT, previewPath), optimized?.buffer || previewFile.buffer);
+    fs.writeFileSync(path.join(STORAGE_ROOT, previewPath), optimized?.buffer || previewFile.buffer);
     await db.prepare('UPDATE cart_items SET preview_path = ? WHERE id = ?').run(previewPath, itemId);
   } else {
     // Legacy JSON fallback (old clients)
@@ -2776,7 +2785,7 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
       const optimized = await optimizeUploadedImage(previewBuf.buffer, previewBuf.mime || 'image/png', 'preview');
       const ext = optimized?.ext || extFromMime(previewBuf.mime || 'image/png');
       previewPath = path.join('uploads', 'cart', String(itemId), `preview.${ext}`);
-      fs.writeFileSync(path.join(ROOT, previewPath), optimized?.buffer || previewBuf.buffer);
+      fs.writeFileSync(path.join(STORAGE_ROOT, previewPath), optimized?.buffer || previewBuf.buffer);
       await db.prepare('UPDATE cart_items SET preview_path = ? WHERE id = ?').run(previewPath, itemId);
     }
   }
@@ -2795,7 +2804,7 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
       const optimized = await optimizeUploadedImage(file.buffer, file.mimetype || 'image/png', 'design');
       const ext = optimized?.ext || extFromMime(file.mimetype || 'image/png');
       filePath = path.join('uploads', 'cart', String(itemId), `design-${idx + 1}.${ext}`);
-      fs.writeFileSync(path.join(ROOT, filePath), optimized?.buffer || file.buffer);
+      fs.writeFileSync(path.join(STORAGE_ROOT, filePath), optimized?.buffer || file.buffer);
     } else {
       // Legacy fallback for old payload format.
       const legacy = dataUrlToBuffer(d.dataUrl);
@@ -2803,7 +2812,7 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
         const optimized = await optimizeUploadedImage(legacy.buffer, legacy.mime, 'design');
         const ext = optimized?.ext || extFromMime(legacy.mime);
         filePath = path.join('uploads', 'cart', String(itemId), `design-${idx + 1}.${ext}`);
-        fs.writeFileSync(path.join(ROOT, filePath), optimized?.buffer || legacy.buffer);
+        fs.writeFileSync(path.join(STORAGE_ROOT, filePath), optimized?.buffer || legacy.buffer);
       }
     }
 
@@ -2925,11 +2934,11 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     if (!USE_PG && item.preview_path) {
       const orderItemDir = path.join(ORDER_DIR, String(orderId), String(itemId));
       fs.mkdirSync(orderItemDir, { recursive: true });
-      const src = path.join(ROOT, item.preview_path);
+      const src = path.join(STORAGE_ROOT, item.preview_path);
       if (fs.existsSync(src)) {
         const ext = path.extname(item.preview_path) || '.png';
         newPreview = path.join('uploads', 'orders', String(orderId), String(itemId), `preview${ext}`);
-        fs.renameSync(src, path.join(ROOT, newPreview));
+        fs.renameSync(src, path.join(STORAGE_ROOT, newPreview));
       }
     }
     if (newPreview) await db.prepare('UPDATE order_items SET preview_path = ? WHERE id = ?').run(newPreview, itemId);
@@ -2940,11 +2949,11 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       if (!USE_PG && d.file_path) {
         const orderItemDir = path.join(ORDER_DIR, String(orderId), String(itemId));
         fs.mkdirSync(orderItemDir, { recursive: true });
-        const src = path.join(ROOT, d.file_path);
+        const src = path.join(STORAGE_ROOT, d.file_path);
         if (fs.existsSync(src)) {
           const ext = path.extname(d.file_path) || '.png';
           newFile = path.join('uploads', 'orders', String(orderId), String(itemId), `design-${i + 1}${ext}`);
-          fs.renameSync(src, path.join(ROOT, newFile));
+          fs.renameSync(src, path.join(STORAGE_ROOT, newFile));
         }
       }
       await db.prepare(`INSERT INTO order_designs(order_item_id, name, position, scale, v_offset, x_offset, note, file_path)
@@ -5140,6 +5149,20 @@ app.get('/uploads/*', async (req, res) => {
 
   setUploadCacheHeaders(res, 'private');
   res.sendFile(normalized.abs);
+});
+
+// In PG/Vercel mode, branding/product assets are written to writable storage (/tmp/uploads/assets/*).
+// This route serves those dynamic assets and falls back to static public assets if not found.
+app.get('/assets/*', async (req, res, next) => {
+  if (!USE_PG) return next();
+  const rel = normalizePublicAssetPath(req.path);
+  if (!rel || (!rel.startsWith('assets/branding/') && !rel.startsWith('assets/products/'))) return next();
+  const abs = path.resolve(UPLOAD_DIR, rel);
+  const allowedRoot = path.resolve(UPLOAD_DIR, 'assets');
+  if (!abs.startsWith(allowedRoot + path.sep) && abs !== allowedRoot) return res.status(400).end();
+  if (!fs.existsSync(abs)) return next();
+  res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=300');
+  return res.sendFile(abs);
 });
 
 app.get('/', async (_req, res) => {
