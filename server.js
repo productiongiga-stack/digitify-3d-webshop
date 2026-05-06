@@ -2,6 +2,8 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
+const connectPgSimple = require('connect-pg-simple');
+const { Pool } = require('pg');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -86,6 +88,9 @@ app.use(express.urlencoded({ extended: true }));
 // The real session handler is injected during boot().
 let _sessionHandler = (_req, _res, next) => next();
 app.use((req, res, next) => _sessionHandler(req, res, next));
+const PgSessionStore = connectPgSimple(session);
+let _sessionStore = null;
+let _sessionPool = null;
 
 // Session and DB init happen in async boot()
 let _booted = false;
@@ -95,11 +100,26 @@ async function boot() {
   await initDatabase();
   const secret = await getOrCreateSecret();
   if (!UPLOAD_SIGNING_SECRET) UPLOAD_SIGNING_SECRET = secret.trim();
+  if (USE_PG) {
+    const ssl = process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false };
+    _sessionPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl });
+    _sessionStore = new PgSessionStore({
+      pool: _sessionPool,
+      tableName: 'user_sessions',
+      createTableIfMissing: true
+    });
+  }
   _sessionHandler = session({
     secret,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', maxAge: SESSION_REMEMBER_MAX_AGE_MS }
+    store: _sessionStore || undefined,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: SESSION_REMEMBER_MAX_AGE_MS
+    }
   });
   const seeded = await ensureOwner();
   if (seeded) {
