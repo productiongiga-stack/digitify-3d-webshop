@@ -23,13 +23,15 @@ const Database = USE_PG ? null : require('better-sqlite3');
 
 const PORT = process.env.PORT || 3737;
 const ROOT = __dirname;
-const STORAGE_ROOT = USE_PG ? '/tmp' : ROOT;
+const IS_VERCEL_RUNTIME = !!process.env.VERCEL;
+const USE_WRITABLE_TMP = USE_PG || IS_VERCEL_RUNTIME;
+const STORAGE_ROOT = USE_WRITABLE_TMP ? '/tmp' : ROOT;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const INDEX_HTML_PATH = path.join(PUBLIC_DIR, 'index.html');
-const BRAND_ASSET_DIR = USE_PG
+const BRAND_ASSET_DIR = USE_WRITABLE_TMP
   ? path.join(STORAGE_ROOT, 'uploads', 'assets', 'branding')
   : path.join(PUBLIC_DIR, 'assets', 'branding');
-const PRODUCT_ASSET_DIR = USE_PG
+const PRODUCT_ASSET_DIR = USE_WRITABLE_TMP
   ? path.join(STORAGE_ROOT, 'uploads', 'assets', 'products')
   : path.join(PUBLIC_DIR, 'assets', 'products');
 const SESSION_REMEMBER_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
@@ -38,8 +40,8 @@ const CART_DIR = path.join(UPLOAD_DIR, 'cart');
 const ORDER_DIR = path.join(UPLOAD_DIR, 'orders');
 const BACKUP_DIR = path.join(STORAGE_ROOT, 'data', 'backups');
 
-// Storage setup: local uses project root, Vercel+PG uses /tmp.
-if (!USE_PG) {
+// Storage setup: local uses project root, serverless/writable runtime uses /tmp.
+if (!USE_WRITABLE_TMP) {
   [UPLOAD_DIR, CART_DIR, ORDER_DIR, BACKUP_DIR, BRAND_ASSET_DIR, PRODUCT_ASSET_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 } else {
   [UPLOAD_DIR, CART_DIR, ORDER_DIR, BRAND_ASSET_DIR, PRODUCT_ASSET_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
@@ -899,7 +901,7 @@ function resolvePublicAssetAbs(raw) {
   if ((staticAbs.startsWith(PUBLIC_DIR + path.sep) || staticAbs === PUBLIC_DIR) && fs.existsSync(staticAbs)) {
     return { rel: normalized, abs: staticAbs };
   }
-  if (USE_PG && (normalized.startsWith('assets/branding/') || normalized.startsWith('assets/products/'))) {
+  if (USE_WRITABLE_TMP && (normalized.startsWith('assets/branding/') || normalized.startsWith('assets/products/'))) {
     const dynAbs = path.resolve(UPLOAD_DIR, normalized);
     const allowedRoot = path.resolve(UPLOAD_DIR, 'assets');
     if ((dynAbs.startsWith(allowedRoot + path.sep) || dynAbs === allowedRoot) && fs.existsSync(dynAbs)) {
@@ -5236,7 +5238,7 @@ app.get('/uploads/*', async (req, res) => {
 // In PG/Vercel mode, branding/product assets are written to writable storage (/tmp/uploads/assets/*).
 // This route serves those dynamic assets and falls back to static public assets if not found.
 app.get('/assets/*', async (req, res, next) => {
-  if (!USE_PG) return next();
+  if (!USE_WRITABLE_TMP) return next();
   const rel = normalizePublicAssetPath(req.path);
   if (!rel || (!rel.startsWith('assets/branding/') && !rel.startsWith('assets/products/'))) return next();
   const abs = path.resolve(UPLOAD_DIR, rel);
