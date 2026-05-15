@@ -475,6 +475,7 @@ const DEFAULT_CONFIG = {
     ogImagePath: 'assets/tshirt_mockup.png'
   },
   theme: {
+    themePreset: 'CUSTOM',
     logoMark: '✦', logoPath: '', faviconPath: '',
     accentColor: '#ffffff', accentColor2: '#bdbdbd',
     headingFont: 'POPPINS', bodyFont: 'POPPINS',

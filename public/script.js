@@ -533,14 +533,22 @@ function _nebMain() {
     btnAddMoreFiles?.addEventListener('click', () => fileInput?.click());
     renderStep2LayerList();
 
-    function handleFiles(files) {
+    let isProcessingFiles = false;
+    async function handleFiles(files) {
+        if (isProcessingFiles) return showToast('Upload bezig, even wachten...');
         const valid = files.filter(f => f && f.type && f.type.startsWith('image/'));
         if (!valid.length) return showToast('Alleen afbeeldingen toegestaan');
 
         const tooBig = valid.find(f => f.size > 10 * 1024 * 1024);
         if (tooBig) return showToast('Bestand te groot (max 10MB)');
-
-        valid.forEach(addLayerFromFile);
+        isProcessingFiles = true;
+        try {
+            for (const file of valid) {
+                await addLayerFromFile(file);
+            }
+        } finally {
+            isProcessingFiles = false;
+        }
     }
 
     function formatSize(bytes) {
@@ -564,22 +572,21 @@ function _nebMain() {
         });
     }
 
-    function addLayerFromFile(file) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const dataUrl = e.target.result;
-
+    async function addLayerFromFile(file) {
+            const objectUrl = URL.createObjectURL(file);
             let img;
             try {
-                img = await loadDesignImage(dataUrl);
+                img = await loadDesignImage(objectUrl);
             } catch {
-                return showToast('Kon afbeelding niet laden');
+                URL.revokeObjectURL(objectUrl);
+                showToast('Kon afbeelding niet laden');
+                return;
             }
 
             const missingActive = getActiveLayer();
             if (missingActive?.needsFile) {
                 missingActive.file = file;
-                missingActive.dataUrl = dataUrl;
+                missingActive.dataUrl = '';
                 missingActive.img = img;
                 missingActive.bytes = file.size;
                 missingActive.name = file.name || missingActive.name;
@@ -600,7 +607,9 @@ function _nebMain() {
                 setActiveLayer(missingActive.id);
                 updatePricingUI();
                 touchDesignerDraft();
-                return showToast('Design opnieuw gekoppeld');
+                showToast('Design opnieuw gekoppeld');
+                URL.revokeObjectURL(objectUrl);
+                return;
             }
 
             const id = uid();
@@ -610,7 +619,7 @@ function _nebMain() {
                 name: file.name,
                 bytes: file.size,
                 file,
-                dataUrl,
+                dataUrl: '',
                 img,
                 needsFile: false,
                 position: 'center',
@@ -643,8 +652,7 @@ function _nebMain() {
             btnNextText.textContent = state.layers.length ? 'Ga verder' : 'Upload eerst je design';
             touchDesignerDraft();
             showToast('Design toegevoegd!');
-        };
-        reader.readAsDataURL(file);
+            URL.revokeObjectURL(objectUrl);
     }
 
     // ── Pricing (config-driven) ──
@@ -1271,32 +1279,36 @@ function _nebMain() {
     });
 
     function updateLayerPosition(layer) {
-        const pos = positionMap[layer.position] || positionMap.center;
-        const scaleFactor = (layer.scale || 100) / 100;
-        const adj = getSizeAdj();
-
-        // Apply size-based adjustments (very subtle) + user fine-tune (px)
-        const topPct = pos.top + (adj.top || 0);
-        const wPct = Math.max(8, (pos.w + (adj.w || 0)) * scaleFactor);
-        const translate = `translate(-50%,-50%) translateX(${layer.xOffset || 0}px) translateY(${layer.vOffset || 0}px)`;
+        const layout = getLayerLayout(layer, 1);
 
         // Position this layer canvas
         if (layer.canvas) {
-            layer.canvas.style.left = pos.left + '%';
-            layer.canvas.style.top = topPct + '%';
-            layer.canvas.style.width = wPct + '%';
+            layer.canvas.style.left = layout.leftPct + '%';
+            layer.canvas.style.top = layout.topPct + '%';
+            layer.canvas.style.width = layout.widthPct + '%';
             layer.canvas.style.height = 'auto';
-            layer.canvas.style.transform = translate;
+            layer.canvas.style.transform = layout.transform;
         }
 
         // Placeholder follows the active layer mapping
         if (designPlaceholder && state.layers.length === 0) {
-            designPlaceholder.style.left = pos.left + '%';
-            designPlaceholder.style.top = topPct + '%';
-            designPlaceholder.style.width = wPct + '%';
-            designPlaceholder.style.transform = translate;
+            designPlaceholder.style.left = layout.leftPct + '%';
+            designPlaceholder.style.top = layout.topPct + '%';
+            designPlaceholder.style.width = layout.widthPct + '%';
+            designPlaceholder.style.transform = layout.transform;
         }
         schedulePreviewModalRefresh();
+    }
+    function getLayerLayout(layer, offsetScale = 1) {
+        const pos = positionMap[layer.position] || positionMap.center;
+        const scaleFactor = (layer.scale || 100) / 100;
+        const adj = getSizeAdj();
+        const topPct = pos.top + (adj.top || 0);
+        const widthPct = Math.max(8, (pos.w + (adj.w || 0)) * scaleFactor);
+        const xPx = Math.round((layer.xOffset || 0) * offsetScale);
+        const yPx = Math.round((layer.vOffset || 0) * offsetScale);
+        const transform = `translate(-50%,-50%) translateX(${xPx}px) translateY(${yPx}px)`;
+        return { leftPct: pos.left, topPct, widthPct, xPx, yPx, transform };
     }
 
     // ── Vertical fine-tuning ──
@@ -1444,6 +1456,10 @@ function _nebMain() {
         }
         if (!hasLayers) return;
 
+        const sourceRect = tshirt3d?.getBoundingClientRect();
+        const targetRect = productPreviewTshirt?.getBoundingClientRect();
+        const modalScale = (sourceRect?.width && targetRect?.width) ? (targetRect.width / sourceRect.width) : 1;
+
         state.layers.forEach((layer) => {
             if (!layer?.canvas) return;
             const source = layer.canvas;
@@ -1453,11 +1469,12 @@ function _nebMain() {
             clone.height = source.height || 1024;
             const ctx = clone.getContext('2d');
             if (ctx) ctx.drawImage(source, 0, 0);
-            clone.style.left = source.style.left || '50%';
-            clone.style.top = source.style.top || '44%';
-            clone.style.width = source.style.width || '28%';
+            const layout = getLayerLayout(layer, modalScale);
+            clone.style.left = layout.leftPct + '%';
+            clone.style.top = layout.topPct + '%';
+            clone.style.width = layout.widthPct + '%';
             clone.style.height = source.style.height || 'auto';
-            clone.style.transform = source.style.transform || 'translate(-50%,-50%)';
+            clone.style.transform = layout.transform;
             if (layer.id === state.activeLayerId) clone.dataset.active = 'true';
             productPreviewLayerStack.appendChild(clone);
         });
@@ -1580,20 +1597,15 @@ function _nebMain() {
 
         // Draw each design layer in the same order as the live preview
         for (const layer of (state.layers || [])) {
-            const pos = positionMap[layer.position] || positionMap.center;
-            const adj = getSizeAdj();
-            const scaleFactor = (layer.scale || 100) / 100;
+            const layout = getLayerLayout(layer, scalePx);
 
-            const topPct = pos.top + (adj.top || 0);
-            const wPct = Math.max(8, (pos.w + (adj.w || 0)) * scaleFactor);
-
-            const w = baseW * (wPct / 100);
+            const w = baseW * (layout.widthPct / 100);
             const h = w; // square canvas for the design
-            const cx = baseW * (pos.left / 100);
-            const cy = baseH * (topPct / 100);
+            const cx = baseW * (layout.leftPct / 100);
+            const cy = baseH * (layout.topPct / 100);
 
-            const x = (cx - w / 2) + ((layer.xOffset || 0) * scalePx);
-            const y = (cy - h / 2) + ((layer.vOffset || 0) * scalePx);
+            const x = (cx - w / 2) + layout.xPx;
+            const y = (cy - h / 2) + layout.yPx;
 
             // Use the already-rendered layer canvas (1024x1024)
             if (layer.canvas) {
@@ -1763,7 +1775,7 @@ async function placeOrder() {
             return;
         }
         if (!state.layers?.length) return showToast('Upload eerst je design');
-        if (state.layers.some(l => !l.file || !l.dataUrl || l.needsFile)) {
+        if (state.layers.some(l => !l.file || l.needsFile)) {
             showToast('Na refresh moet je je design-bestanden opnieuw uploaden');
             goToStep(1);
             return;

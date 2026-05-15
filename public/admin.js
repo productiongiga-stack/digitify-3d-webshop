@@ -24,6 +24,11 @@ const EMAIL_TEMPLATES = [
   { key: 'emailVerification', label: '✉️ E-mailverificatie' },
   { key: 'passwordReset', label: '🔑 Wachtwoord reset' }
 ];
+const THEME_PRESETS = {
+  GREEN: { accentColor: '#22c55e', accentColor2: '#84cc16', headingFont: 'SPACE_GROTESK', bodyFont: 'INTER', buttonStyle: 'PILL', sectionTone: 'BOLD' },
+  BLUE: { accentColor: '#3b82f6', accentColor2: '#0ea5e9', headingFont: 'POPPINS', bodyFont: 'INTER', buttonStyle: 'ROUNDED', sectionTone: 'MUTED' },
+  NEUTRAL: { accentColor: '#e5e7eb', accentColor2: '#a3a3a3', headingFont: 'SERIF', bodyFont: 'SYSTEM', buttonStyle: 'SHARP', sectionTone: 'FLAT' }
+};
 
 let CURRENT_USER = null;
 let ORDER_STATE = { page: 1, limit: 20, q: '', status: '', invoiceStatus: '', archived: 'ACTIVE' };
@@ -3425,6 +3430,17 @@ function renderSettings(c) {
       <p class="muted compact" style="margin:-.5rem 0 1rem">Kleuren, typografie en buttons worden op alle pagina's toegepast.</p>
       <div class="form-grid-2">
         <div class="field"><label>Logo symbool</label><input id="themeLogoMark" value="${escAttr(theme.logoMark || '✦')}" maxlength="2" placeholder="✦"></div>
+        <div class="field"><label>Thema preset</label>
+          <div style="display:flex;gap:.5rem">
+            <select id="themePreset" style="flex:1">
+              <option value="CUSTOM" ${String(theme.themePreset || 'CUSTOM').toUpperCase() === 'CUSTOM' ? 'selected' : ''}>Custom</option>
+              <option value="GREEN" ${String(theme.themePreset || '').toUpperCase() === 'GREEN' ? 'selected' : ''}>Green</option>
+              <option value="BLUE" ${String(theme.themePreset || '').toUpperCase() === 'BLUE' ? 'selected' : ''}>Blue</option>
+              <option value="NEUTRAL" ${String(theme.themePreset || '').toUpperCase() === 'NEUTRAL' ? 'selected' : ''}>Neutral</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" id="applyThemePresetBtn" type="button">Toepassen</button>
+          </div>
+        </div>
         <div class="field"><label>Button stijl</label>
           <select id="themeButtonStyle">
             <option value="ROUNDED" ${themeButtonStyle === 'ROUNDED' ? 'selected' : ''}>Rounded</option>
@@ -3754,6 +3770,14 @@ function bindSettings(cfg) {
     updateAllTemplateVersionUI();
     NEB.toast(successMsg, 'success');
   };
+  const applyThemePresetToDraft = (preset) => {
+    const key = String(preset || '').toUpperCase();
+    const values = THEME_PRESETS[key];
+    if (!values) return false;
+    draft.theme = draft.theme || {};
+    Object.assign(draft.theme, values, { themePreset: key });
+    return true;
+  };
 
   const clickHandler = async (e) => {
     const t = e.target;
@@ -3787,6 +3811,19 @@ function bindSettings(cfg) {
     }
     if (t.id === 'uploadFaviconBtn') {
       wrap.querySelector('#uploadFaviconFile')?.click();
+      return;
+    }
+    if (t.id === 'applyThemePresetBtn') {
+      const preset = String(wrap.querySelector('#themePreset')?.value || 'CUSTOM').toUpperCase();
+      if (preset === 'CUSTOM') {
+        draft.theme = draft.theme || {};
+        draft.theme.themePreset = 'CUSTOM';
+      } else if (!applyThemePresetToDraft(preset)) {
+        NEB.toast('Onbekende preset', 'error');
+        return;
+      }
+      rerender();
+      NEB.toast(`Thema preset ${preset} toegepast`, 'success');
       return;
     }
     // Product sub-tab switching (inside producten stab panel)
@@ -4085,11 +4122,13 @@ function bindSettings(cfg) {
     if (!Number.isFinite(draft.hero.videoBlurPx)) draft.hero.videoBlurPx = 0;
     draft.hero.videoBlurPx = Math.max(0, Math.min(8, draft.hero.videoBlurPx));
     draft.seo = draft.seo || {};
-    draft.seo.metaDescription = wrap.querySelector('#seoMetaDescription')?.value || draft.seo.metaDescription || '';
-    draft.seo.ogTitle = wrap.querySelector('#seoOgTitle')?.value || draft.seo.ogTitle || '';
-    draft.seo.ogDescription = wrap.querySelector('#seoOgDescription')?.value || draft.seo.ogDescription || '';
-    draft.seo.ogImagePath = wrap.querySelector('#seoOgImagePath')?.value || draft.seo.ogImagePath || '';
+    draft.seo.metaDescription = String(wrap.querySelector('#seoMetaDescription')?.value || draft.seo.metaDescription || '').trim().slice(0, 320);
+    draft.seo.ogTitle = String(wrap.querySelector('#seoOgTitle')?.value || draft.seo.ogTitle || '').trim().slice(0, 120);
+    draft.seo.ogDescription = String(wrap.querySelector('#seoOgDescription')?.value || draft.seo.ogDescription || '').trim().slice(0, 320);
+    const rawOgImage = String(wrap.querySelector('#seoOgImagePath')?.value || draft.seo.ogImagePath || '').trim();
+    draft.seo.ogImagePath = /^https?:\/\//i.test(rawOgImage) ? rawOgImage.replace(/\s+/g, '') : rawOgImage.replace(/^\/+/, '');
     draft.theme = draft.theme || {};
+    draft.theme.themePreset = String(wrap.querySelector('#themePreset')?.value || draft.theme.themePreset || 'CUSTOM').toUpperCase();
     draft.theme.logoMark = (wrap.querySelector('#themeLogoMark')?.value || draft.theme.logoMark || '✦').slice(0, 2);
     draft.theme.accentColor = wrap.querySelector('#themeAccentColor')?.value || draft.theme.accentColor || '#ffffff';
     draft.theme.accentColor2 = wrap.querySelector('#themeAccentColor2')?.value || draft.theme.accentColor2 || '#bdbdbd';

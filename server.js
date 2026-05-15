@@ -79,6 +79,13 @@ const productMockupUpload = multer({
 const app = express();
 app.set('trust proxy', 1);
 const APP_STARTED_AT = Date.now();
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 app.use(express.json({
   limit: '20mb',
   verify: (req, _res, buf) => { req.rawBody = buf; }
@@ -274,6 +281,35 @@ function setUploadCacheHeaders(res, mode = 'private', expiresAt = null) {
 function isRasterImageMime(mime) {
   return ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/avif', 'image/tiff'].includes(String(mime || '').toLowerCase());
 }
+function sanitizeBaseUrl(raw, fallback = '') {
+  const txt = String(raw == null ? '' : raw).replace(/\s+/g, '').trim();
+  if (!txt) return fallback;
+  if (!/^https?:\/\//i.test(txt)) return fallback;
+  try {
+    const url = new URL(txt);
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return fallback;
+  }
+}
+function normalizeUploadFilesForCart(previewFile, designFiles, maxDesigns = 20) {
+  const preview = previewFile?.buffer?.length ? previewFile : null;
+  const files = Array.isArray(designFiles) ? designFiles.filter(Boolean) : [];
+  if (files.length > maxDesigns) {
+    const err = new Error(`Te veel designbestanden (max ${maxDesigns})`);
+    err.status = 400;
+    throw err;
+  }
+  for (const f of files) {
+    const mime = String(f?.mimetype || '').toLowerCase();
+    if (!mime.startsWith('image/')) {
+      const err = new Error(`Ongeldig bestandstype: ${f?.originalname || 'bestand'}`);
+      err.status = 400;
+      throw err;
+    }
+  }
+  return { preview, files };
+}
 async function optimizeUploadedImage(buffer, mime, purpose = 'design') {
   if (!buffer?.length) return null;
   const inMime = String(mime || '').toLowerCase();
@@ -287,13 +323,29 @@ async function optimizeUploadedImage(buffer, mime, purpose = 'design') {
       fit: 'inside',
       withoutEnlargement: true
     });
-    const quality = purpose === 'preview' ? 78 : 82;
-    const out = await pipeline.webp({ quality, alphaQuality: quality, effort: 4 }).toBuffer();
+    const quality = purpose === 'preview' ? 76 : 82;
+    const effort = purpose === 'preview' ? 2 : 4;
+    const out = await pipeline.webp({ quality, alphaQuality: quality, effort }).toBuffer();
     if (out.length > 0 && out.length <= buffer.length) {
       return { buffer: out, mime: 'image/webp', ext: 'webp', optimized: true };
     }
   } catch {}
   return { buffer, mime: inMime || 'application/octet-stream', ext: extFromMime(inMime), optimized: false };
+}
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return [];
+  const c = Math.max(1, Math.min(4, Number(concurrency) || 1));
+  const out = new Array(list.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < list.length) {
+      const cur = idx++;
+      out[cur] = await mapper(list[cur], cur);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(c, list.length) }, () => worker()));
+  return out;
 }
 
 const ALLOWED_STATUS = [
@@ -312,7 +364,10 @@ const FINAL_ORDER_STATUS = ['PAID', 'IN_PRODUCTION', 'SHIPPED', 'DELIVERED', 'CA
 const SHIPPING_CARRIERS = ['POSTNL', 'BPOST', 'GLS'];
 const SHIPPING_STATUS = ['UNKNOWN', 'PRE_ADVICE', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION', 'RETURNED'];
 
-const APP_BASE_URL = (process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
+const APP_BASE_URL = sanitizeBaseUrl(
+  process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`,
+  `http://localhost:${PORT}`
+);
 let UPLOAD_SIGNING_SECRET = process.env.UPLOAD_SIGNING_SECRET || '';
 // Will be resolved in boot() if not set via env
 
@@ -333,7 +388,7 @@ async function getStripeWebhookSecret() {
 async function getAppBaseUrl() {
   if (process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL) return APP_BASE_URL;
   const stored = await getSetting('stripe_app_base_url');
-  return stored ? String(stored).replace(/\/+$/, '') : APP_BASE_URL;
+  return stored ? sanitizeBaseUrl(stored, APP_BASE_URL) : APP_BASE_URL;
 }
 
 let _stripeCache = null;
@@ -976,6 +1031,11 @@ function renderIndexWithSeo(config) {
   html = replaceHeadTag(html, /<meta[^>]*name="twitter:title"[^>]*>/i, `<meta name="twitter:title" content="${htmlEscape(seo.title)}">`);
   html = replaceHeadTag(html, /<meta[^>]*name="twitter:description"[^>]*>/i, `<meta name="twitter:description" content="${htmlEscape(seo.ogDescription)}">`);
   html = replaceHeadTag(html, /<meta[^>]*name="twitter:image"[^>]*>/i, `<meta name="twitter:image" content="${htmlEscape(seo.ogImage)}">`);
+  if (/<link[^>]*rel="canonical"[^>]*>/i.test(html)) {
+    html = replaceHeadTag(html, /<link[^>]*rel="canonical"[^>]*>/i, `<link rel="canonical" href="${htmlEscape(seo.pageUrl)}">`);
+  } else {
+    html = html.replace('</head>', `  <link rel="canonical" href="${htmlEscape(seo.pageUrl)}">\n</head>`);
+  }
   html = replaceHeadTag(html, /<script[^>]*id="seoJsonLd"[^>]*>[\s\S]*?<\/script>/i, jsonLdScriptTag(seo.jsonLd));
   return html;
 }
@@ -2718,8 +2778,9 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
   if (!product?.size) return res.status(400).json({ error: 'Maat ontbreekt' });
   if (!Array.isArray(designs)) designs = [];
 
-  const previewFile = req.files?.preview?.[0] || null;
-  const designFiles = Array.isArray(req.files?.designFiles) ? req.files.designFiles : [];
+  const uploaded = normalizeUploadFilesForCart(req.files?.preview?.[0] || null, req.files?.designFiles, 20);
+  const previewFile = uploaded.preview;
+  const designFiles = uploaded.files;
 
   // Backward compatibility: if only files are sent, generate metadata automatically.
   if (!designs.length && designFiles.length) {
@@ -2795,19 +2856,16 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
     VALUES(?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  for (let idx = 0; idx < designs.length; idx++) {
-    const d = designs[idx] || {};
+  const storedDesignFiles = await mapWithConcurrency(designs, 3, async (d, idx) => {
     let filePath = null;
     const file = designFiles[idx];
-
     if (file?.buffer?.length) {
       const optimized = await optimizeUploadedImage(file.buffer, file.mimetype || 'image/png', 'design');
       const ext = optimized?.ext || extFromMime(file.mimetype || 'image/png');
       filePath = path.join('uploads', 'cart', String(itemId), `design-${idx + 1}.${ext}`);
       fs.writeFileSync(path.join(STORAGE_ROOT, filePath), optimized?.buffer || file.buffer);
     } else {
-      // Legacy fallback for old payload format.
-      const legacy = dataUrlToBuffer(d.dataUrl);
+      const legacy = dataUrlToBuffer(d?.dataUrl);
       if (legacy) {
         const optimized = await optimizeUploadedImage(legacy.buffer, legacy.mime, 'design');
         const ext = optimized?.ext || extFromMime(legacy.mime);
@@ -2815,7 +2873,12 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
         fs.writeFileSync(path.join(STORAGE_ROOT, filePath), optimized?.buffer || legacy.buffer);
       }
     }
+    return filePath;
+  });
 
+  for (let idx = 0; idx < designs.length; idx++) {
+    const d = designs[idx] || {};
+    const filePath = storedDesignFiles[idx];
     if (!filePath) {
       const fileMissing = new Error(`Bestand ontbreekt voor design ${idx + 1}`);
       fileMissing.status = 400;
@@ -4497,6 +4560,7 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER'), async (req, res)
     const allowedBody = new Set(['POPPINS', 'INTER', 'SPACE_GROTESK', 'SYSTEM', 'SERIF']);
     const allowedBtn = new Set(['ROUNDED', 'PILL', 'SHARP']);
     const allowedSection = new Set(['MUTED', 'FLAT', 'BOLD']);
+    const allowedPresets = new Set(['CUSTOM', 'GREEN', 'BLUE', 'NEUTRAL']);
     if (nextTheme.headingFont != null) {
       const v = String(nextTheme.headingFont || '').toUpperCase();
       nextTheme.headingFont = allowedHeading.has(v) ? v : 'POPPINS';
@@ -4512,6 +4576,10 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER'), async (req, res)
     if (nextTheme.sectionTone != null) {
       const v = String(nextTheme.sectionTone || '').toUpperCase();
       nextTheme.sectionTone = allowedSection.has(v) ? v : 'MUTED';
+    }
+    if (nextTheme.themePreset != null) {
+      const v = String(nextTheme.themePreset || '').toUpperCase();
+      nextTheme.themePreset = allowedPresets.has(v) ? v : 'CUSTOM';
     }
     nextTheme.invoiceOpenBg = normalizeThemeColor(nextTheme.invoiceOpenBg, '#1d4ed8');
     nextTheme.invoiceOpenText = normalizeThemeColor(nextTheme.invoiceOpenText, '#eff6ff');
@@ -4548,6 +4616,20 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER'), async (req, res)
     cfg.hero.videoBlurPx = Number.isFinite(blurRaw)
       ? Math.max(0, Math.min(8, Math.round(blurRaw)))
       : Math.max(0, Math.min(8, Math.round(Number(before?.hero?.videoBlurPx ?? 0))));
+  }
+  if (cfg.seo != null && (typeof cfg.seo !== 'object' || Array.isArray(cfg.seo))) {
+    return res.status(400).json({ error: 'seo moet een object zijn' });
+  }
+  if (cfg.seo) {
+    const baseSeo = before?.seo || {};
+    const nextSeo = { ...baseSeo, ...cfg.seo };
+    nextSeo.metaDescription = cleanText(nextSeo.metaDescription || '', 320);
+    nextSeo.ogTitle = cleanText(nextSeo.ogTitle || '', 120);
+    nextSeo.ogDescription = cleanText(nextSeo.ogDescription || '', 320);
+    const ogRaw = String(nextSeo.ogImagePath || '').trim();
+    nextSeo.ogImagePath = /^https?:\/\//i.test(ogRaw) ? ogRaw.replace(/\s+/g, '') : normalizePublicAssetPath(ogRaw);
+    if (!nextSeo.ogImagePath) nextSeo.ogImagePath = 'assets/tshirt_mockup.png';
+    cfg.seo = nextSeo;
   }
   const next = { ...before, ...cfg };
   await setSetting('config', next);
