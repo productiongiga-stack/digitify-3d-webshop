@@ -86,7 +86,11 @@ const NEB = (() => {
       const ct = r.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await r.json() : await r.text();
       if (!r.ok) {
-        const err = new Error((data && data.error) || `HTTP ${r.status}`);
+        let msg = (data && data.error) || `HTTP ${r.status}`;
+        if (r.status === 413) {
+          msg = 'Bestand te groot voor directe upload. Vernieuw de pagina en upload opnieuw (chunk-upload wordt dan gebruikt).';
+        }
+        const err = new Error(msg);
         err.status = r.status;
         err.data = data;
         throw err;
@@ -95,12 +99,52 @@ const NEB = (() => {
     });
   };
 
+  function maxDirectUploadBytes() {
+    const cfg = window.NEB_CONFIG?.platform || {};
+    const n = Number(cfg.maxDirectUploadBytes);
+    return Number.isFinite(n) && n > 0 ? n : Math.floor(3.5 * 1024 * 1024);
+  }
+
+  function chunkUploadBytes() {
+    const cfg = window.NEB_CONFIG?.platform || {};
+    const n = Number(cfg.chunkUploadBytes);
+    return Number.isFinite(n) && n > 0 ? n : 3 * 1024 * 1024;
+  }
+
+  function shouldUseChunkedUpload(file) {
+    return !!(file && file.size > maxDirectUploadBytes());
+  }
+
+  async function uploadChunked(file, meta) {
+    const chunkSize = chunkUploadBytes();
+    const totalChunks = Math.max(1, Math.ceil(file.size / chunkSize));
+    let sessionId = '';
+    for (let i = 0; i < totalChunks; i++) {
+      const form = new FormData();
+      if (sessionId) form.append('sessionId', sessionId);
+      form.append('chunkIndex', String(i));
+      form.append('totalChunks', String(totalChunks));
+      form.append('meta', JSON.stringify({ ...meta, totalBytes: file.size }));
+      const start = i * chunkSize;
+      const slice = file.slice(start, Math.min(file.size, start + chunkSize));
+      form.append('chunk', slice, file.name || 'upload.bin');
+      const out = await json('/api/admin/uploads/chunk', { method: 'POST', body: form });
+      sessionId = out.sessionId || sessionId;
+      if (out.done) return out;
+    }
+    const err = new Error('Chunk-upload niet afgerond');
+    err.status = 500;
+    throw err;
+  }
+
   return {
     json,
     get: (p) => json(p),
     post: (p, body) => json(p, { method: 'POST', body }),
     put: (p, body) => json(p, { method: 'PUT', body }),
     del: (p) => json(p, { method: 'DELETE' }),
+    shouldUseChunkedUpload,
+    uploadChunked,
 
     me: () => json('/api/auth/me').then(d => d.user),
     config: () => json('/api/config'),

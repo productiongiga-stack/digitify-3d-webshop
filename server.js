@@ -26,6 +26,7 @@ const { registerClientLogRoutes } = require('./routes/client-log');
 const { registerHealthRoutes } = require('./routes/health');
 const { registerProduct3dRoutes } = require('./routes/product-3d');
 const { registerPublicConfigRoutes } = require('./routes/public-config');
+const { registerChunkedUploadRoutes } = require('./routes/chunked-upload');
 const { registerAdminOrdersBulkRoutes } = require('./routes/admin-orders-bulk');
 const pgAdapter = USE_PG ? require('./db-pg') : null;
 const { version: APP_VERSION = '0.0.0' } = require('./package.json');
@@ -5096,6 +5097,16 @@ registerProduct3dRoutes(app, {
   logAuditFromReq,
   getConfig,
   setSetting,
+  uploadDir: UPLOAD_DIR
+});
+registerChunkedUploadRoutes(app, {
+  requireAuth,
+  requireRole,
+  persistUploadBlob,
+  loadUploadBlob,
+  removeUploadBlob,
+  writePublicAsset,
+  logAuditFromReq,
   uploadDir: UPLOAD_DIR
 });
 registerHealthRoutes(app, {

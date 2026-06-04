@@ -1,4 +1,5 @@
 const { getPlatformAssetMeta } = require('../lib/asset-storage');
+const { getUploadPlatformLimits } = require('../lib/direct-upload-limit');
 
 function registerPublicConfigRoutes(app, deps) {
   const { getConfig, resolveAppBaseUrl } = deps;
@@ -12,7 +13,8 @@ function registerPublicConfigRoutes(app, deps) {
     safe.platform = {
       assetCdnBase: platform.assetCdnBase,
       assetStorage: platform.assetStorage,
-      assetUrlMode: platform.assetUrlMode
+      assetUrlMode: platform.assetUrlMode,
+      ...getUploadPlatformLimits()
     };
     res.json(safe);
   });

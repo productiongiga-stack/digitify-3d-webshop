@@ -3863,6 +3863,25 @@ function bindProduct3dUploadGrid(modal, ctx = {}) {
     if (resourceDir) form.append('resourceDir', resourceDir);
   };
 
+  const post3dAssetFile = async (file, fieldName) => {
+    const productId = getPm3dProductId(modal);
+    const resourceDir = getPm3dResourceDir(modal) || '';
+    if (NEB.shouldUseChunkedUpload?.(file)) {
+      return NEB.uploadChunked(file, {
+        kind: 'product3d',
+        field: fieldName,
+        productId,
+        resourceDir,
+        filename: file.name,
+        mimetype: file.type || ''
+      });
+    }
+    const form = new FormData();
+    appendPm3dFormContext(form);
+    form.append(fieldName, file, file.name);
+    return NEB.json('/api/admin/products/3d-assets', { method: 'POST', body: form });
+  };
+
   const persistUploaded3dPaths = async () => {
     if (isNew || productIdx < 0 || typeof persistFn !== 'function' || !draft?.products?.[productIdx]) {
       NEB.toast('Wijziging klaar. Sla het product op om te bewaren.', 'success');
@@ -3904,13 +3923,10 @@ function bindProduct3dUploadGrid(modal, ctx = {}) {
   const upload3dAsset = async (fieldName, input, button, label, dropKind) => {
     const file = input?.files?.[0];
     if (!file) return;
-    const form = new FormData();
-    appendPm3dFormContext(form);
-    form.append(fieldName, file, file.name);
     try {
       if (button) { button.disabled = true; button.textContent = 'Upload...'; }
       setPm3dDropCardState(modal, dropKind, 'uploading');
-      const out = await NEB.json('/api/admin/products/3d-assets', { method: 'POST', body: form });
+      const out = await post3dAssetFile(file, fieldName);
       applyPm3dUploadResponse(modal, out.model3d || {});
       await persistUploaded3dPaths();
     } catch (err) {
@@ -3928,13 +3944,22 @@ function bindProduct3dUploadGrid(modal, ctx = {}) {
   const upload3dResources = async (input, button) => {
     const files = [...(input?.files || [])];
     if (!files.length) return;
-    const form = new FormData();
-    appendPm3dFormContext(form);
-    files.forEach((file) => form.append('resources', file, file.name));
+    const needsChunk = files.some((f) => NEB.shouldUseChunkedUpload?.(f));
     try {
       if (button) { button.disabled = true; button.textContent = 'Upload...'; }
-      const out = await NEB.json('/api/admin/products/3d-assets', { method: 'POST', body: form });
-      applyPm3dUploadResponse(modal, out.model3d || {});
+      let lastOut = null;
+      if (needsChunk) {
+        for (const file of files) {
+          lastOut = await post3dAssetFile(file, 'resources');
+          applyPm3dUploadResponse(modal, lastOut.model3d || {});
+        }
+      } else {
+        const form = new FormData();
+        appendPm3dFormContext(form);
+        files.forEach((file) => form.append('resources', file, file.name));
+        lastOut = await NEB.json('/api/admin/products/3d-assets', { method: 'POST', body: form });
+        applyPm3dUploadResponse(modal, lastOut.model3d || {});
+      }
       await persistUploaded3dPaths();
     } catch (err) {
       NEB.toast(err.message || 'Extra bestanden upload mislukt', 'error');
