@@ -13,7 +13,7 @@ if (document.readyState === 'loading') {
 } else {
     _nebInitWhenReady();
 }
-function _nebMain() {
+async function _nebMain() {
 
     // ── Pre-fill order form for logged-in users ──
     const _u = window.NEB_USER;
@@ -50,6 +50,8 @@ function _nebMain() {
         activeLayerId: null
     };
     const DESIGNER_DRAFT_KEY = 'neb_designer_draft_v1';
+    const DESIGNER_FILES_DB = 'neb_designer_files_v1';
+    const DESIGNER_FILES_STORE = 'blobs';
     const ALLOWED_POSITIONS = new Set(['top', 'center', 'bottom', 'full', 'leftchest', 'rightchest']);
     let restoringDraft = false;
 
@@ -127,6 +129,93 @@ function _nebMain() {
 
     function clearDesignerDraft() {
         try { sessionStorage.removeItem(DESIGNER_DRAFT_KEY); } catch {}
+        clearDesignerFilesDb().catch(() => {});
+    }
+
+    function openDesignerFilesDb() {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+            const req = indexedDB.open(DESIGNER_FILES_DB, 1);
+            req.onupgradeneeded = () => {
+                const idb = req.result;
+                if (!idb.objectStoreNames.contains(DESIGNER_FILES_STORE)) {
+                    idb.createObjectStore(DESIGNER_FILES_STORE, { keyPath: 'layerId' });
+                }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function saveDesignerFileBlob(layerId, file) {
+        if (!layerId || !file || !window.indexedDB) return;
+        try {
+            const idb = await openDesignerFilesDb();
+            await new Promise((resolve, reject) => {
+                const tx = idb.transaction(DESIGNER_FILES_STORE, 'readwrite');
+                tx.objectStore(DESIGNER_FILES_STORE).put({
+                    layerId,
+                    blob: file,
+                    name: file.name,
+                    type: file.type,
+                    bytes: file.size,
+                    savedAt: Date.now()
+                });
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+            idb.close();
+        } catch { /* quota or private mode */ }
+    }
+
+    async function loadDesignerFileBlob(layerId) {
+        if (!layerId || !window.indexedDB) return null;
+        try {
+            const idb = await openDesignerFilesDb();
+            const rec = await new Promise((resolve, reject) => {
+                const tx = idb.transaction(DESIGNER_FILES_STORE, 'readonly');
+                const req = tx.objectStore(DESIGNER_FILES_STORE).get(layerId);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => reject(req.error);
+            });
+            idb.close();
+            return rec;
+        } catch {
+            return null;
+        }
+    }
+
+    async function clearDesignerFilesDb() {
+        if (!window.indexedDB) return;
+        try {
+            const idb = await openDesignerFilesDb();
+            await new Promise((resolve, reject) => {
+                const tx = idb.transaction(DESIGNER_FILES_STORE, 'readwrite');
+                tx.objectStore(DESIGNER_FILES_STORE).clear();
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+            idb.close();
+        } catch {}
+    }
+
+    function showDesignerDraftBanner(missingNames) {
+        let el = document.getElementById('designerDraftBanner');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'designerDraftBanner';
+            el.className = 'designer-draft-banner';
+            el.setAttribute('role', 'status');
+            const host = document.querySelector('.designer-panel') || document.querySelector('main');
+            host?.prepend(el);
+        }
+        if (!missingNames?.length) {
+            el.hidden = true;
+            el.textContent = '';
+            return;
+        }
+        el.hidden = false;
+        el.innerHTML = `<strong>Concept hersteld.</strong> Upload opnieuw voor: ${missingNames.map((n) => `<em>${String(n).replace(/</g, '')}</em>`).join(', ')}. Bestanden worden lokaal bewaard waar mogelijk (IndexedDB).`;
     }
 
     function touchDesignerDraft() {
@@ -590,6 +679,7 @@ function _nebMain() {
                 setActiveLayer(missingActive.id);
                 updatePricingUI();
                 touchDesignerDraft();
+                saveDesignerFileBlob(missingActive.id, file);
                 showToast('Design opnieuw gekoppeld');
                 URL.revokeObjectURL(objectUrl);
                 return;
@@ -634,6 +724,7 @@ function _nebMain() {
             btnNext.disabled = state.layers.length === 0;
             btnNextText.textContent = state.layers.length ? 'Ga verder' : 'Upload eerst je design';
             touchDesignerDraft();
+            saveDesignerFileBlob(id, file);
             showToast('Design toegevoegd!');
             URL.revokeObjectURL(objectUrl);
     }
@@ -944,7 +1035,7 @@ function _nebMain() {
         showToast('Ontwerp verwijderd');
     }
 
-    function restoreDesignerDraft() {
+    async function restoreDesignerDraft() {
         let parsed = null;
         try {
             parsed = JSON.parse(sessionStorage.getItem(DESIGNER_DRAFT_KEY) || 'null');
@@ -996,6 +1087,39 @@ function _nebMain() {
         goToStep(1);
         restoringDraft = false;
         updatePricingUI();
+
+        const stillMissing = [];
+        for (const layer of state.layers) {
+            if (!layer.needsFile) continue;
+            const rec = await loadDesignerFileBlob(layer.id);
+            if (!rec?.blob) {
+                stillMissing.push(layer.name);
+                continue;
+            }
+            try {
+                const file = new File([rec.blob], rec.name || 'design.png', { type: rec.type || 'image/png' });
+                const objectUrl = URL.createObjectURL(file);
+                const img = await loadDesignImage(objectUrl);
+                URL.revokeObjectURL(objectUrl);
+                layer.file = file;
+                layer.img = img;
+                layer.bytes = file.size;
+                layer.needsFile = false;
+                if (!layer.canvas) {
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'design-canvas';
+                    canvas.dataset.layerId = layer.id;
+                    layer.canvas = canvas;
+                    layerStack?.appendChild(canvas);
+                }
+                renderLayer(layer);
+            } catch {
+                stillMissing.push(layer.name);
+            }
+        }
+        if (stillMissing.length) showDesignerDraftBanner(stillMissing);
+        else showDesignerDraftBanner([]);
+        btnNext.disabled = state.layers.some((l) => !l.file || l.needsFile);
         return true;
     }
 
@@ -2236,7 +2360,7 @@ async function placeOrder() {
     applyConversionCards();
     applyPreferredStartColor(true);
     // Altijd starten op Step 1 — draft enkel herstellen voor product/kleur/maat, niet voor step
-    if (!restoreDesignerDraft()) {
+    if (!(await restoreDesignerDraft())) {
         applySelectedProduct(getSelectedProduct(), { preferWhite: true });
     }
     updatePricingUI();

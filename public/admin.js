@@ -25,7 +25,7 @@ const EMAIL_TEMPLATES = [
   { key: 'passwordReset', label: '🔑 Wachtwoord reset' }
 ];
 const THEME_PRESETS = {
-  GREEN: { accentColor: '#22c55e', accentColor2: '#84cc16', headingFont: 'SPACE_GROTESK', bodyFont: 'INTER', buttonStyle: 'PILL', sectionTone: 'BOLD' },
+  GREEN: { accentColor: '#14b8a6', accentColor2: '#a3e635', headingFont: 'SPACE_GROTESK', bodyFont: 'INTER', buttonStyle: 'PILL', sectionTone: 'BOLD' },
   BLUE: { accentColor: '#3b82f6', accentColor2: '#0ea5e9', headingFont: 'POPPINS', bodyFont: 'INTER', buttonStyle: 'ROUNDED', sectionTone: 'MUTED' },
   NEUTRAL: { accentColor: '#e5e7eb', accentColor2: '#a3a3a3', headingFont: 'SERIF', bodyFont: 'SYSTEM', buttonStyle: 'SHARP', sectionTone: 'FLAT' }
 };
@@ -255,6 +255,99 @@ function normalizeProducts(products) {
     }
     return out.slice(0, 20);
   };
+  const sanitizeAssetPath = (raw, max = 260) => {
+    const value = String(raw || '').trim().replace(/^\/+/, '').slice(0, max);
+    if (!value || value.includes('..') || /^(https?:|data:|javascript:)/i.test(value)) return '';
+    return value;
+  };
+  const sanitizeModel3d = (raw) => {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const modelPath = sanitizeAssetPath(src.modelPath || src.path || '');
+    let materialPath = sanitizeAssetPath(src.materialPath || '');
+    const posterPath = sanitizeAssetPath(src.posterPath || src.poster || '');
+    const resolvedFormat = inferModelFormatFromManifest({ format: src.format, modelPath });
+    if (resolvedFormat !== 'obj') materialPath = '';
+    const qualityRaw = String(src.quality || '').trim().toLowerCase();
+    let resourceDir = sanitizeAssetPath(src.resourceDir || '');
+    if (!resourceDir && modelPath.includes('/')) {
+      resourceDir = sanitizeAssetPath(modelPath.slice(0, modelPath.lastIndexOf('/') + 1));
+    }
+    const scaleRaw = Number(src.scale);
+    const rotationXRaw = Number(src.rotationX);
+    const rotationYRaw = Number(src.rotationY);
+    const rotationZRaw = Number(src.rotationZ);
+    const rotateSpeedRaw = Number(src.rotateSpeed);
+    const quality = qualityRaw === 'standard' ? 'standard' : 'high';
+    const lightingRaw = String(src.lightingPreset || '').trim().toLowerCase();
+    const envRaw = String(src.envPreset || '').trim().toLowerCase();
+    const exposureRaw = Number(src.exposure);
+    const envIntensityRaw = Number(src.envIntensity);
+    const shadowOpacityRaw = Number(src.shadowOpacity);
+    const groundShadowOpacityRaw = Number(src.groundShadowOpacity);
+    const productShadowOpacityRaw = Number(src.productShadowOpacity);
+    const legacyShadowOpacity = Number.isFinite(shadowOpacityRaw) ? shadowOpacityRaw : null;
+    const saturationRaw = Number(src.saturation);
+    const shadowPresetRaw = String(src.shadowPreset || '').trim().toLowerCase();
+    const keyLightColorRaw = String(src.keyLightColor || '').trim();
+    const fillLightColorRaw = String(src.fillLightColor || '').trim();
+    const rimLightColorRaw = String(src.rimLightColor || '').trim();
+    const fillMulRaw = Number(src.fillLightIntensity);
+    const rimMulRaw = Number(src.rimLightIntensity);
+    const detailRaw = String(src.detailLevel || '').trim().toLowerCase();
+    const keyLightMatch = keyLightColorRaw.match(/^#?([0-9a-f]{6})$/i);
+    const fillLightMatch = fillLightColorRaw.match(/^#?([0-9a-f]{6})$/i);
+    const rimLightMatch = rimLightColorRaw.match(/^#?([0-9a-f]{6})$/i);
+    const detailLevels = new Set(['auto', 'low', 'medium', 'high']);
+    const lightingPresets = new Set(['studio', 'soft', 'dramatic']);
+    const envPresets = new Set(['room', 'neutral', 'warm', 'cool', 'none']);
+    const shadowPresets = new Set(['none', 'soft', 'natural', 'studio']);
+    const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+    let shadowPreset = shadowPresets.has(shadowPresetRaw) ? shadowPresetRaw : '';
+    if (!shadowPreset) {
+      if (src.shadows === false) shadowPreset = 'none';
+      else if (src.shadows === true) shadowPreset = 'natural';
+      else shadowPreset = quality !== 'standard' ? 'natural' : 'none';
+    }
+    if (quality === 'standard') shadowPreset = 'none';
+    return {
+      enabled: !!modelPath && src.enabled !== false,
+      format: resolvedFormat,
+      modelPath,
+      materialPath,
+      posterPath,
+      resourceDir,
+      quality,
+      scale: Number.isFinite(scaleRaw) ? Math.min(20, Math.max(0.01, scaleRaw)) : 1,
+      rotationX: Number.isFinite(rotationXRaw) ? Math.max(-360, Math.min(360, rotationXRaw)) : 0,
+      rotationY: Number.isFinite(rotationYRaw) ? Math.max(-360, Math.min(360, rotationYRaw)) : 0,
+      rotationZ: Number.isFinite(rotationZRaw) ? Math.max(-360, Math.min(360, rotationZRaw)) : 0,
+      autoRotate: src.autoRotate === true,
+      rotateSpeed: Number.isFinite(rotateSpeedRaw) ? Math.min(3, Math.max(0, rotateSpeedRaw)) : 0.42,
+      lightingPreset: lightingPresets.has(lightingRaw) ? lightingRaw : 'studio',
+      envPreset: quality !== 'standard' && envPresets.has(envRaw) ? envRaw : (quality !== 'standard' ? 'room' : 'none'),
+      shadowPreset,
+      shadows: shadowPreset !== 'none',
+      groundShadows: shadowPreset !== 'none' && src.groundShadows !== false,
+      keyLightColor: keyLightMatch ? `#${keyLightMatch[1].toLowerCase()}` : '',
+      fillLightIntensity: Number.isFinite(fillMulRaw) ? clamp(fillMulRaw, 0.5, 2) : 1,
+      rimLightIntensity: Number.isFinite(rimMulRaw) ? clamp(rimMulRaw, 0.5, 2) : 1,
+      fillLightColor: fillLightMatch ? `#${fillLightMatch[1].toLowerCase()}` : '',
+      rimLightColor: rimLightMatch ? `#${rimLightMatch[1].toLowerCase()}` : '',
+      detailLevel: detailLevels.has(detailRaw) ? detailRaw : 'auto',
+      exposure: Number.isFinite(exposureRaw) ? clamp(exposureRaw, 0.65, 1.65) : (quality !== 'standard' ? 1.08 : 1),
+      envIntensity: Number.isFinite(envIntensityRaw) ? clamp(envIntensityRaw, 0.5, 2.5) : (quality !== 'standard' ? 1.35 : 1.05),
+      shadowOpacity: Number.isFinite(groundShadowOpacityRaw)
+        ? clamp(groundShadowOpacityRaw, 0.12, 0.85)
+        : (legacyShadowOpacity != null ? clamp(legacyShadowOpacity, 0.12, 0.85) : 0.42),
+      groundShadowOpacity: Number.isFinite(groundShadowOpacityRaw)
+        ? clamp(groundShadowOpacityRaw, 0.12, 0.85)
+        : (legacyShadowOpacity != null ? clamp(legacyShadowOpacity, 0.12, 0.85) : 0.42),
+      productShadowOpacity: Number.isFinite(productShadowOpacityRaw)
+        ? clamp(productShadowOpacityRaw, 0.12, 0.85)
+        : (legacyShadowOpacity != null ? clamp(legacyShadowOpacity, 0.12, 0.85) : 0.42),
+      saturation: Number.isFinite(saturationRaw) ? clamp(saturationRaw, 0.5, 1.5) : 1
+    };
+  };
 
   const src = Array.isArray(products) ? products : [];
   const seen = new Set();
@@ -316,6 +409,7 @@ function normalizeProducts(products) {
       name: String(p?.name || `Product ${idx + 1}`),
       description: String(p?.description || ''),
       mockupPath: String(p?.mockupPath || 'assets/tshirt_mockup.png'),
+      model3d: sanitizeModel3d(p?.model3d),
       basePrice: Number.isFinite(basePriceRaw) ? Math.max(0, Math.round(basePriceRaw * 100) / 100) : null,
       extraDesignFee: Number.isFinite(extraDesignFeeRaw) ? Math.max(0, Math.round(extraDesignFeeRaw * 100) / 100) : null,
       priceMultiplier: Number.isFinite(Number(p?.priceMultiplier)) ? Number(p.priceMultiplier) : 1,
@@ -327,15 +421,16 @@ function normalizeProducts(products) {
       colorHexes: parseColorHexes(p?.colorHexes),
       enabled: p?.enabled !== false,
       isDefault: !!p?.isDefault,
+      isFeatured: !!p?.isFeatured,
       sortOrder: Number.isFinite(Number(p?.sortOrder)) ? Math.max(0, Math.min(9999, Math.round(Number(p.sortOrder)))) : ((idx + 1) * 10)
     });
   });
 
   if (!out.length) {
     return [{
-      id: 'tshirt',
-      name: 'T-shirt',
-      description: 'Premium unisex T-shirt',
+      id: 'phone-case',
+      name: '3D telefooncase',
+      description: 'Interactief voorbeeldproduct met 3D preview',
       mockupPath: 'assets/tshirt_mockup.png',
       basePrice: null,
       extraDesignFee: null,
@@ -354,13 +449,30 @@ function normalizeProducts(products) {
       ],
       colorHexes: ['#f2f2f2', '#0b0b0b', '#6b6b6b'],
       enabled: true,
-      isDefault: true
+      isDefault: true,
+      isFeatured: true,
+      model3d: {
+        enabled: true,
+        format: 'obj',
+        modelPath: 'assets/products/3d/iphone/iphone.obj',
+        materialPath: 'assets/products/3d/iphone/iphone.mtl',
+        posterPath: 'assets/tshirt_mockup.png',
+        scale: 1,
+        rotationX: 0,
+        rotationY: -8,
+        rotationZ: 0,
+        autoRotate: true,
+        rotateSpeed: 0.42
+      }
     }];
   }
   if (!out.some(p => p.enabled)) out[0].enabled = true;
   let defaultIdx = out.findIndex(p => p.enabled && p.isDefault);
   if (defaultIdx < 0) defaultIdx = out.findIndex(p => p.enabled);
   out.forEach((p, idx) => { p.isDefault = idx === defaultIdx; });
+  let featuredIdx = out.findIndex(p => p.enabled && p.isFeatured);
+  if (featuredIdx < 0) featuredIdx = defaultIdx;
+  out.forEach((p, idx) => { p.isFeatured = idx === featuredIdx; });
   return out.sort((a, b) => {
     const ao = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 9999;
     const bo = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 9999;
@@ -1282,8 +1394,8 @@ async function showOrderDetail(id) {
                       <div class="preview-tile">
                         ${it.preview_path
                           ? `<div style="display:flex;flex-direction:column;gap:.55rem;align-items:center">
-                              <img src="/${it.preview_path}" alt="">
-                              <button class="btn btn-ghost btn-sm" data-sign-path="${it.preview_path}">Deellink (24u)</button>
+                              <img src="/${escAttr(String(it.preview_path).replace(/^\/+/, ''))}" alt="" onerror="this.onerror=null;this.src='/assets/tshirt_mockup.png';">
+                              <button class="btn btn-ghost btn-sm" data-sign-path="${escAttr(it.preview_path)}">Deellink (24u)</button>
                             </div>`
                           : `<div class="muted">Geen preview</div>`}
                       </div>
@@ -2786,6 +2898,7 @@ function renderProductCard(p, i) {
       <div class="prod-card-thumb">
         ${thumb}
         ${p.isDefault ? '<span class="prod-card-badge">Default</span>' : ''}
+        ${p.isFeatured ? '<span class="prod-card-badge">3D hero</span>' : ''}
         ${p.enabled === false ? '<span class="prod-card-badge prod-card-badge--off">Inactief</span>' : ''}
       </div>
       <div class="prod-card-body">
@@ -2798,6 +2911,11 @@ function renderProductCard(p, i) {
 
 function renderProductsTabPanel(products, c) {
   const productCards = products.map((p, i) => renderProductCard(p, i)).join('');
+  const productCount = products.length;
+  const products3dCount = products.filter((p) => p.model3d?.enabled && p.model3d?.modelPath).length;
+  const catalogFoldMeta = productCount
+    ? `${productCount} product${productCount === 1 ? '' : 'en'}${products3dCount ? ` · ${products3dCount}× 3D` : ''}`
+    : 'Geen producten';
 
   const colorSwatches = (c.colors || []).map((col, i) => `
     <div class="color-swatch-item" data-color-row="${i}">
@@ -2831,12 +2949,22 @@ function renderProductsTabPanel(products, c) {
       </div>
 
       <div class="prod-subtab-panel active" data-prod-subtab-panel="producten">
-        <div class="settings-section">
-          <h3>Productcatalogus</h3>
-          <p class="muted compact" style="margin:-.5rem 0 1.2rem">Klik op <strong>Bewerk</strong> om prijs, kleuren, maten en mockup per product in te stellen.</p>
-          <div class="prod-card-grid">${productCards || '<p class="muted">Nog geen producten.</p>'}</div>
-          <button class="btn btn-ghost btn-sm" id="addProduct" style="margin-top:1.25rem" type="button">+ Nieuw product</button>
-        </div>
+        <details class="settings-section settings-fold">
+          <summary class="settings-fold-summary">
+            <span class="settings-fold-title">Productcatalogus</span>
+            <span class="settings-fold-meta">${escText(catalogFoldMeta)}</span>
+            <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+          </summary>
+          <div class="settings-fold-body settings-fold-body--catalog">
+            <p class="muted compact settings-fold-hint">Klik op <strong>Bewerk</strong> voor prijs, kleuren, maten en mockup per product.</p>
+            <div class="prod-card-grid prod-card-grid--compact">${productCards || '<p class="muted">Nog geen producten.</p>'}</div>
+            <div class="settings-fold-actions">
+              <button class="btn btn-ghost btn-sm" id="addProduct" type="button">+ Nieuw product</button>
+              <button class="btn btn-ghost btn-sm" id="bulkEnsurePostersBtn" type="button" title="Maakt voor 3D-producten zonder poster een WebP-poster van de mockup">Vul ontbrekende 3D-posters</button>
+              <span class="muted compact" id="bulkEnsurePostersResult"></span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <div class="prod-subtab-panel" data-prod-subtab-panel="kleuren">
@@ -2878,13 +3006,1386 @@ function renderProductsTabPanel(products, c) {
     </div><!-- /stab producten -->`;
 }
 
+function pathBasename(filePath) {
+  const p = String(filePath || '').trim().replace(/^\/+/, '');
+  if (!p) return '';
+  return p.split('/').pop() || p;
+}
+
+function inferModelFormatFromManifest(manifest) {
+  const path = String(manifest?.modelPath || manifest?.path || '').trim().toLowerCase();
+  if (path.endsWith('.obj')) return 'obj';
+  if (path.endsWith('.glb')) return 'glb';
+  if (path.endsWith('.gltf')) return 'gltf';
+  if (path.endsWith('.stl')) return 'stl';
+  if (path.endsWith('.fbx')) return 'fbx';
+  const fmt = String(manifest?.format || '').trim().toLowerCase();
+  if (['glb', 'gltf', 'obj', 'stl', 'fbx'].includes(fmt)) return fmt;
+  return 'glb';
+}
+
+function inferModelFormatFromPath(modelPath) {
+  return inferModelFormatFromManifest({ modelPath });
+}
+
+function syncPm3dFormatFromPath(modal) {
+  const modelPath = (modal.querySelector('#pmModel3dPath')?.value || '').trim().toLowerCase();
+  const sel = modal.querySelector('#pmModel3dFormat');
+  if (!sel || !modelPath) return;
+  const fmt = inferModelFormatFromPath(modelPath);
+  if ([...sel.options].some((o) => o.value === fmt)) sel.value = fmt;
+}
+
+function refreshPm3dStatus(modal) {
+  if (!modal) return;
+  syncPm3dFormatFromPath(modal);
+  const modelPath = (modal.querySelector('#pmModel3dPath')?.value || '').trim();
+  if (inferModelFormatFromPath(modelPath) !== 'obj') {
+    const matInput = modal.querySelector('#pmModel3dMaterial');
+    if (matInput?.value) matInput.value = '';
+  }
+  const posterPath = (modal.querySelector('#pmModel3dPoster')?.value || '').trim();
+  const materialPath = (modal.querySelector('#pmModel3dMaterial')?.value || '').trim();
+  const format = String(modal.querySelector('#pmModel3dFormat')?.value || '').toLowerCase();
+  const modelLabel = modal.querySelector('#pmModel3dModelLabel');
+  const posterLabel = modal.querySelector('#pmModel3dPosterLabel');
+  const posterThumb = modal.querySelector('#pmModel3dPosterThumb');
+  const statusEl = modal.querySelector('#pmModel3dStatus');
+  const enabledCb = modal.querySelector('#pmModel3dEnabled');
+  if (modelLabel) modelLabel.textContent = modelPath ? pathBasename(modelPath) : 'Nog geen model geüpload';
+  if (posterLabel) posterLabel.textContent = posterPath ? pathBasename(posterPath) : 'Geen poster (optioneel)';
+  modal.querySelector('#pmModel3dModelClear')?.toggleAttribute('hidden', !modelPath);
+  modal.querySelector('#pmModel3dPosterClear')?.toggleAttribute('hidden', !posterPath);
+  if (posterThumb) {
+    if (posterPath) {
+      const posterSrc = `/${escAttr(posterPath.replace(/^\/+/, ''))}`;
+      posterThumb.innerHTML = `<img src="${posterSrc}" alt="" width="48" height="48" style="object-fit:cover;border-radius:6px" onerror="this.onerror=null;this.hidden=true;this.parentElement.classList.add('is-broken')">`;
+      posterThumb.hidden = false;
+      posterThumb.classList.remove('is-broken');
+    } else {
+      posterThumb.innerHTML = '';
+      posterThumb.hidden = true;
+      posterThumb.classList.remove('is-broken');
+    }
+  }
+  if (statusEl) {
+    const pills = [
+      { ok: !!modelPath, label: modelPath ? `Model: ${pathBasename(modelPath)}` : 'Model ontbreekt' },
+      (() => {
+        const posterPill = window.AdminProduct3d?.posterStatusLabel?.(modal);
+        if (posterPill) return posterPill;
+        return { ok: !!posterPath, label: posterPath ? `Poster: ${pathBasename(posterPath)}` : 'Poster ontbreekt (aanbevolen)' };
+      })(),
+      {
+        ok: inferModelFormatFromPath(modelPath) !== 'obj' || !!materialPath,
+        label: inferModelFormatFromPath(modelPath) === 'obj'
+          ? (materialPath ? `MTL: ${pathBasename(materialPath)}` : 'MTL verplicht bij OBJ + textures via map_Kd')
+          : (materialPath ? `MTL: ${pathBasename(materialPath)} (niet gebruikt bij GLB)` : 'Textures in GLB/GLTF of upload via Textures & BIN')
+      }
+    ];
+    statusEl.innerHTML = pills.map((pill) =>
+      `<span class="prod-3d-pill${pill.ok ? ' is-ok' : ' is-warn'}">${escText(pill.label)}</span>`
+    ).join('');
+  }
+  const needsMtl = format === 'obj' || modelPath.toLowerCase().endsWith('.obj');
+  modal.querySelector('#pmModel3dMaterialWrap')?.classList.toggle('is-highlight', needsMtl && !materialPath);
+  syncPm3dPresentationControls(modal);
+}
+
+const PM3D_LIGHTING_LABELS = { studio: 'Studio', soft: 'Zacht', dramatic: 'Contrast' };
+const PM3D_ENV_LABELS = { room: 'Studio kamer', neutral: 'Neutraal', warm: 'Warm', cool: 'Koel', none: 'Geen' };
+const PM3D_SHADOW_LABELS = { none: 'Geen', soft: 'Zacht', natural: 'Natuurlijk', studio: 'Studio' };
+
+function derivePm3dShadowPreset(m3d, isHigh) {
+  const raw = String(m3d?.shadowPreset || '').trim().toLowerCase();
+  if (['none', 'soft', 'natural', 'studio'].includes(raw)) return raw;
+  if (m3d?.shadows === false) return 'none';
+  if (m3d?.shadows === true) return 'natural';
+  return isHigh ? 'natural' : 'none';
+}
+
+function updatePm3dSettingsLiveMeta(modal) {
+  const el = modal?.querySelector('#pm3dSettingsLiveMeta');
+  if (!el) return;
+  const isHigh = (modal.querySelector('#pmModel3dQuality')?.value || 'high') !== 'standard';
+  if (!isHigh) {
+    el.textContent = 'Standaard · vlak licht';
+    return;
+  }
+  const lighting = modal.querySelector('#pmModel3dLighting')?.value || 'studio';
+  const env = modal.querySelector('#pmModel3dEnv')?.value || 'room';
+  const shadowPreset = modal.querySelector('#pmModel3dShadowPreset')?.value || 'natural';
+  el.textContent = `Hoog · ${PM3D_LIGHTING_LABELS[lighting] || lighting} · ${PM3D_ENV_LABELS[env] || env} · ${PM3D_SHADOW_LABELS[shadowPreset] || shadowPreset}`;
+}
+
+const PM3D_SHADOW_HINTS = {
+  none: 'Geen schaduwen.',
+  soft: 'Zachte vloerschaduw; geen schaduw op het product zelf.',
+  natural: 'Schaduw op het product; optioneel ook op de vloer (grondschaduw).',
+  studio: 'Sterke productschaduw; optioneel vloer met cast-schaduw.'
+};
+
+const PM3D_DEFAULT_KEY_LIGHT = { studio: '#ffffff', soft: '#ffffff', dramatic: '#ffffff' };
+const PM3D_DEFAULT_FILL_LIGHT = { studio: '#f8fafc', soft: '#f1f5f9', dramatic: '#94a3b8' };
+const PM3D_DEFAULT_RIM_LIGHT = { studio: '#99f6e4', soft: '#cffafe', dramatic: '#5eead4' };
+
+const PM3D_PRESENTATION_DEFAULTS = {
+  quality: 'high',
+  lightingPreset: 'studio',
+  envPreset: 'room',
+  shadowPreset: 'natural',
+  shadows: true,
+  groundShadows: true,
+  keyLightColor: '',
+  fillLightIntensity: 1,
+  rimLightIntensity: 1,
+  fillLightColor: '',
+  rimLightColor: '',
+  detailLevel: 'auto',
+  exposure: 1.08,
+  envIntensity: 1.35,
+  shadowOpacity: 0.42,
+  groundShadowOpacity: 0.42,
+  productShadowOpacity: 0.42,
+  saturation: 1,
+  autoRotate: false,
+  rotateSpeed: 0.42,
+  scale: 1,
+  rotationY: 0
+};
+
+const PM3D_LOOK_PRESETS = {
+  catalogNeutral: {
+    label: 'Catalogus',
+    lightingPreset: 'soft',
+    envPreset: 'neutral',
+    shadowPreset: 'natural',
+    groundShadows: true,
+    keyLightColor: '',
+    fillLightColor: '',
+    rimLightColor: '',
+    fillLightIntensity: 1,
+    rimLightIntensity: 1,
+    exposure: 1.05,
+    envIntensity: 1.2,
+    groundShadowOpacity: 0.4,
+    productShadowOpacity: 0.4,
+    saturation: 1,
+    detailLevel: 'auto'
+  },
+  heroDramatic: {
+    label: 'Hero',
+    lightingPreset: 'dramatic',
+    envPreset: 'room',
+    shadowPreset: 'studio',
+    groundShadows: true,
+    keyLightColor: '',
+    fillLightColor: '',
+    rimLightColor: '',
+    fillLightIntensity: 1,
+    rimLightIntensity: 1,
+    exposure: 1.12,
+    envIntensity: 1.4,
+    groundShadowOpacity: 0.5,
+    productShadowOpacity: 0.52,
+    saturation: 1,
+    detailLevel: 'auto'
+  },
+  minimalNoGround: {
+    label: 'Minimal',
+    lightingPreset: 'studio',
+    envPreset: 'room',
+    shadowPreset: 'natural',
+    groundShadows: false,
+    keyLightColor: '',
+    fillLightColor: '',
+    rimLightColor: '',
+    fillLightIntensity: 1,
+    rimLightIntensity: 1,
+    exposure: 1.08,
+    envIntensity: 1.35,
+    groundShadowOpacity: 0.42,
+    productShadowOpacity: 0.42,
+    saturation: 1,
+    detailLevel: 'auto'
+  }
+};
+
+const PM3D_SHADOW_PRESET_HAS_PRODUCT = {
+  none: false,
+  soft: false,
+  natural: true,
+  studio: true
+};
+
+const PM3D_KNOB_HINTS = {
+  pmModel3dExposure: 'Lager = donkerder; hoger = risico op uitbleken.',
+  pmModel3dEnvIntensity: '0,5 = mat; 1,5 = glanzend.',
+  pmModel3dGroundShadowOpacity: 'Contact-cirkel en cast-schaduw op de vloer.',
+  pmModel3dProductShadowOpacity: 'Schaduw op het model zelf (licht & donkere zones).',
+  pmModel3dSaturation: '0,5 = grijzer; 1,5 = fellere kleuren.',
+  pmModel3dFillLightIntensity: '0,5 = zwakker vullicht; 2 = sterker dan preset.',
+  pmModel3dRimLightIntensity: '0,5 = zwak randlicht; 2 = sterker randlicht.'
+};
+
+function pm3dHexForLighting(lightingPreset, map, stored) {
+  const raw = String(stored || '').trim();
+  if (raw.match(/^#?[0-9a-f]{6}$/i)) {
+    return raw.startsWith('#') ? raw : `#${raw}`;
+  }
+  return map[lightingPreset] || map.studio || '#ffffff';
+}
+
+function setPm3dFormFromPresentation(modal, pres) {
+  if (!modal || !pres) return;
+  const setVal = (sel, val) => {
+    const el = modal.querySelector(sel);
+    if (el != null && val != null) el.value = String(val);
+  };
+  const setCheck = (sel, on) => {
+    const el = modal.querySelector(sel);
+    if (el) el.checked = !!on;
+  };
+  setVal('#pmModel3dQuality', pres.quality ?? 'high');
+  setVal('#pmModel3dLighting', pres.lightingPreset ?? 'studio');
+  setVal('#pmModel3dEnv', pres.envPreset ?? 'room');
+  setVal('#pmModel3dShadowPreset', pres.shadowPreset ?? 'natural');
+  setCheck('#pmModel3dGroundShadows', pres.groundShadows !== false);
+  const lighting = pres.lightingPreset || 'studio';
+  setVal('#pmModel3dKeyLightColor', pm3dHexForLighting(lighting, PM3D_DEFAULT_KEY_LIGHT, pres.keyLightColor));
+  setVal('#pmModel3dFillLightColor', pm3dHexForLighting(lighting, PM3D_DEFAULT_FILL_LIGHT, pres.fillLightColor));
+  setVal('#pmModel3dRimLightColor', pm3dHexForLighting(lighting, PM3D_DEFAULT_RIM_LIGHT, pres.rimLightColor));
+  setVal('#pmModel3dDetailLevel', pres.detailLevel ?? 'auto');
+  setVal('#pmModel3dExposure', pres.exposure ?? 1.08);
+  setVal('#pmModel3dEnvIntensity', pres.envIntensity ?? 1.35);
+  setVal('#pmModel3dGroundShadowOpacity', pres.groundShadowOpacity ?? pres.shadowOpacity ?? 0.42);
+  setVal('#pmModel3dProductShadowOpacity', pres.productShadowOpacity ?? pres.shadowOpacity ?? 0.42);
+  setVal('#pmModel3dSaturation', pres.saturation ?? 1);
+  setVal('#pmModel3dFillLightIntensity', pres.fillLightIntensity ?? 1);
+  setVal('#pmModel3dRimLightIntensity', pres.rimLightIntensity ?? 1);
+  setVal('#pmModel3dExposureRange', pres.exposure ?? 1.08);
+  setVal('#pmModel3dEnvIntensityRange', pres.envIntensity ?? 1.35);
+  setVal('#pmModel3dGroundShadowOpacityRange', pres.groundShadowOpacity ?? pres.shadowOpacity ?? 0.42);
+  setVal('#pmModel3dProductShadowOpacityRange', pres.productShadowOpacity ?? pres.shadowOpacity ?? 0.42);
+  setVal('#pmModel3dSaturationRange', pres.saturation ?? 1);
+  setVal('#pmModel3dFillLightIntensityRange', pres.fillLightIntensity ?? 1);
+  setVal('#pmModel3dRimLightIntensityRange', pres.rimLightIntensity ?? 1);
+  if (pres.scale != null) {
+    setVal('#pmModel3dScale', pres.scale);
+    setVal('#pmModel3dScaleRange', pres.scale);
+  }
+  if (pres.rotationY != null) {
+    setVal('#pmModel3dRotY', pres.rotationY);
+    setVal('#pmModel3dRotYRange', pres.rotationY);
+  }
+  if (pres.autoRotate != null) setCheck('#pmModel3dAutoRotate', pres.autoRotate === true);
+  if (pres.rotateSpeed != null) {
+    setVal('#pmModel3dRotateSpeed', pres.rotateSpeed);
+    setVal('#pmModel3dRotateSpeedRange', pres.rotateSpeed);
+  }
+  syncPm3dShadowPresetUi(modal);
+  syncPm3dAutoRotateUi(modal);
+  syncPm3dKnobHints(modal);
+  updatePm3dSettingsLiveMeta(modal);
+  [
+    '#pmModel3dExposure', '#pmModel3dEnvIntensity', '#pmModel3dGroundShadowOpacity', '#pmModel3dProductShadowOpacity', '#pmModel3dSaturation',
+    '#pmModel3dFillLightIntensity', '#pmModel3dRimLightIntensity',
+    '#pmModel3dRotateSpeed', '#pmModel3dScale', '#pmModel3dRotY'
+  ].forEach((id) => syncPm3dKnobReadout(modal, id));
+}
+
+function applyPm3dLookPreset(modal, presetId, onApplied) {
+  const preset = PM3D_LOOK_PRESETS[presetId];
+  if (!preset || !modal) return;
+  setPm3dFormFromPresentation(modal, preset);
+  onApplied?.();
+}
+
+function resetPm3dPresentation(modal, onApplied) {
+  if (!modal) return;
+  if (!window.confirm('Alle weergave-instellingen terugzetten naar standaard? Model en poster blijven behouden.')) return;
+  setPm3dFormFromPresentation(modal, PM3D_PRESENTATION_DEFAULTS);
+  onApplied?.();
+}
+
+function copyPm3dPresentationFromProduct(modal, sourceM3d, opts = {}, onApplied) {
+  if (!modal || !sourceM3d) return;
+  const pres = {
+    quality: sourceM3d.quality,
+    lightingPreset: sourceM3d.lightingPreset,
+    envPreset: sourceM3d.envPreset,
+    shadowPreset: sourceM3d.shadowPreset || derivePm3dShadowPreset(sourceM3d, sourceM3d.quality !== 'standard'),
+    groundShadows: sourceM3d.groundShadows,
+    keyLightColor: sourceM3d.keyLightColor,
+    fillLightIntensity: sourceM3d.fillLightIntensity,
+    rimLightIntensity: sourceM3d.rimLightIntensity,
+    fillLightColor: sourceM3d.fillLightColor,
+    rimLightColor: sourceM3d.rimLightColor,
+    detailLevel: sourceM3d.detailLevel,
+    exposure: sourceM3d.exposure,
+    envIntensity: sourceM3d.envIntensity,
+    groundShadowOpacity: sourceM3d.groundShadowOpacity ?? sourceM3d.shadowOpacity,
+    productShadowOpacity: sourceM3d.productShadowOpacity ?? sourceM3d.shadowOpacity,
+    saturation: sourceM3d.saturation
+  };
+  if (opts.includeHeroMotion) {
+    pres.scale = sourceM3d.scale;
+    pres.rotationY = sourceM3d.rotationY;
+    pres.autoRotate = sourceM3d.autoRotate;
+    pres.rotateSpeed = sourceM3d.rotateSpeed;
+  }
+  setPm3dFormFromPresentation(modal, pres);
+  onApplied?.();
+}
+
+function syncPm3dKnobHints(modal) {
+  if (!modal) return;
+  Object.entries(PM3D_KNOB_HINTS).forEach(([inputId, text]) => {
+    const hint = modal.querySelector(`[data-pm3d-hint-for="${inputId}"]`);
+    if (hint) hint.textContent = text;
+    const range = modal.querySelector(`#${inputId}Range`) || modal.querySelector(`#${inputId}`);
+    if (range && text) range.title = text;
+  });
+}
+
+function syncPm3dPreviewScopeUi(modal) {
+  if (!modal) return;
+  const mode = modal.querySelector('[name="pmModel3dPreviewMode"]:checked')?.value || 'hero';
+  const isCatalog = mode === 'catalog';
+  const knob = modal.querySelector('.prod-3d-knob--hero-scale');
+  const rotKnob = modal.querySelector('.prod-3d-knob--hero-rot');
+  const motionGroup = modal.querySelector('.prod-3d-settings-knobs--motion');
+  const hint = modal.querySelector('#pmModel3dHeroScaleHint');
+  if (knob) {
+    knob.classList.toggle('prod-3d-knob--readonly', isCatalog);
+    knob.querySelectorAll('input').forEach((el) => { el.disabled = isCatalog; });
+  }
+  if (rotKnob) {
+    rotKnob.classList.toggle('prod-3d-knob--readonly', isCatalog);
+    rotKnob.querySelectorAll('input').forEach((el) => { el.disabled = isCatalog; });
+  }
+  if (motionGroup) {
+    motionGroup.querySelectorAll('.prod-3d-knob--hero-only').forEach((el) => {
+      el.classList.toggle('prod-3d-knob--muted-scope', isCatalog);
+    });
+  }
+  const heroHint = isCatalog
+    ? 'Catalogus: vaste schaal en afgeleide rotatie (~25% van hero-Y, vaste tilt).'
+    : 'Hero: schaal en startrotatie gelden voor de grote shop-weergave.';
+  if (hint) hint.textContent = heroHint;
+  if (knob) knob.title = heroHint;
+  if (rotKnob) rotKnob.title = heroHint;
+}
+
+function syncPm3dShadowPresetUi(modal) {
+  const preset = modal.querySelector('#pmModel3dShadowPreset')?.value || 'none';
+  const isNone = preset === 'none';
+  const groundOn = !!modal.querySelector('#pmModel3dGroundShadows')?.checked;
+  const hasProduct = !!PM3D_SHADOW_PRESET_HAS_PRODUCT[preset];
+  const groundKnob = modal.querySelector('#pmModel3dGroundShadowOpacity')?.closest('.prod-3d-knob');
+  const productKnob = modal.querySelector('#pmModel3dProductShadowOpacity')?.closest('.prod-3d-knob');
+  const groundRow = modal.querySelector('.prod-3d-ground-shadow-row');
+  const groundDisabled = isNone || !groundOn;
+  const productDisabled = isNone || !hasProduct;
+  if (groundKnob) groundKnob.classList.toggle('prod-3d-knob--disabled', groundDisabled);
+  if (productKnob) productKnob.classList.toggle('prod-3d-knob--disabled', productDisabled);
+  modal.querySelector('#pmModel3dGroundShadowOpacity')?.toggleAttribute('disabled', groundDisabled);
+  modal.querySelector('#pmModel3dGroundShadowOpacityRange')?.toggleAttribute('disabled', groundDisabled);
+  modal.querySelector('#pmModel3dProductShadowOpacity')?.toggleAttribute('disabled', productDisabled);
+  modal.querySelector('#pmModel3dProductShadowOpacityRange')?.toggleAttribute('disabled', productDisabled);
+  if (groundRow) groundRow.classList.toggle('prod-3d-knob--disabled', isNone);
+  modal.querySelector('#pmModel3dGroundShadows')?.toggleAttribute('disabled', isNone);
+  const hint = modal.querySelector('#pmModel3dShadowHint');
+  if (hint) hint.textContent = PM3D_SHADOW_HINTS[preset] || PM3D_SHADOW_HINTS.natural;
+}
+
+function syncPm3dPresentationControls(modal) {
+  if (!modal) return;
+  const isHigh = (modal.querySelector('#pmModel3dQuality')?.value || 'high') !== 'standard';
+  const fieldset = modal.querySelector('.prod-3d-settings');
+  if (fieldset) fieldset.classList.toggle('prod-3d-settings--standard', !isHigh);
+  updatePm3dSettingsLiveMeta(modal);
+  syncPm3dShadowPresetUi(modal);
+  syncPm3dKnobHints(modal);
+  [
+    '#pmModel3dLighting',
+    '#pmModel3dEnv',
+    '#pmModel3dShadowPreset',
+    '#pmModel3dDetailLevel',
+    '#pmModel3dExposure',
+    '#pmModel3dExposureRange',
+    '#pmModel3dEnvIntensity',
+    '#pmModel3dEnvIntensityRange',
+    '#pmModel3dGroundShadowOpacity',
+    '#pmModel3dGroundShadowOpacityRange',
+    '#pmModel3dProductShadowOpacity',
+    '#pmModel3dProductShadowOpacityRange',
+    '#pmModel3dSaturation',
+    '#pmModel3dSaturationRange',
+    '#pmModel3dFillLightIntensity',
+    '#pmModel3dFillLightIntensityRange',
+    '#pmModel3dRimLightIntensity',
+    '#pmModel3dRimLightIntensityRange',
+    '#pmModel3dKeyLightColor',
+    '#pmModel3dFillLightColor',
+    '#pmModel3dRimLightColor'
+  ].forEach((sel) => {
+    const el = modal.querySelector(sel);
+    if (el) el.disabled = !isHigh;
+  });
+}
+
+const PM3D_HERO_SCALE_MIN = 0.15;
+const PM3D_HERO_SCALE_MAX = 12;
+
+function formatPm3dKnobReadout(input) {
+  const step = Number(input.step) || 1;
+  const v = Number(input.value);
+  if (!Number.isFinite(v)) return '';
+  const decimals = step < 0.1 ? 2 : (step < 1 ? 1 : 0);
+  return v.toFixed(decimals).replace('.', ',');
+}
+
+function syncPm3dKnobReadout(modal, inputId) {
+  const input = modal.querySelector(inputId);
+  const readout = modal.querySelector(`[data-pm3d-readout-for="${inputId.replace('#', '')}"]`);
+  if (input && readout) readout.textContent = formatPm3dKnobReadout(input);
+}
+
+function bindPm3dRangePair(modal, rangeId, inputId, onSync) {
+  const range = modal.querySelector(rangeId);
+  const input = modal.querySelector(inputId);
+  if (!range || !input) return;
+  const syncFromRange = () => {
+    input.value = range.value;
+    syncPm3dKnobReadout(modal, inputId);
+  };
+  const syncFromInput = () => {
+    const min = Number(range.min);
+    const max = Number(range.max);
+    let v = Number(input.value);
+    if (!Number.isFinite(v)) v = Number(range.value);
+    v = Math.min(max, Math.max(min, v));
+    range.value = String(v);
+    input.value = String(v);
+    syncPm3dKnobReadout(modal, inputId);
+  };
+  const emit = () => { onSync?.(); };
+  range.addEventListener('input', () => { syncFromRange(); emit(); });
+  input.addEventListener('change', () => { syncFromInput(); emit(); });
+  input.addEventListener('input', () => { syncFromInput(); emit(); });
+  syncFromInput();
+}
+
+function syncPm3dAutoRotateUi(modal) {
+  const on = modal.querySelector('#pmModel3dAutoRotate')?.checked === true;
+  const label = modal.querySelector('#pmModel3dAutoRotateLabel');
+  const speedKnob = modal.querySelector('#pmModel3dRotateSpeed')?.closest('.prod-3d-knob');
+  const speedRange = modal.querySelector('#pmModel3dRotateSpeedRange');
+  if (label) label.textContent = on ? 'Aan' : 'Uit (startpositie)';
+  if (speedKnob) speedKnob.classList.toggle('prod-3d-knob--disabled', !on);
+  if (speedRange) speedRange.disabled = !on;
+  if (modal.querySelector('#pmModel3dRotateSpeed')) {
+    modal.querySelector('#pmModel3dRotateSpeed').disabled = !on;
+  }
+}
+
+function bindPm3dHeroScalePair(modal, onSync) {
+  const range = modal.querySelector('#pmModel3dScaleRange');
+  const input = modal.querySelector('#pmModel3dScale');
+  const knob = range?.closest('.prod-3d-knob--hero-scale');
+  if (!range || !input) return;
+
+  range.min = String(PM3D_HERO_SCALE_MIN);
+  range.max = String(PM3D_HERO_SCALE_MAX);
+  input.min = String(PM3D_HERO_SCALE_MIN);
+  input.max = String(PM3D_HERO_SCALE_MAX);
+
+  const clamp = (raw) => {
+    let v = Number(raw);
+    if (!Number.isFinite(v)) v = 1;
+    return Math.min(PM3D_HERO_SCALE_MAX, Math.max(PM3D_HERO_SCALE_MIN, v));
+  };
+
+  const sync = (raw) => {
+    const v = clamp(raw);
+    const str = String(v);
+    range.value = str;
+    input.value = str;
+    if (knob) {
+      const pct = ((v - PM3D_HERO_SCALE_MIN) / (PM3D_HERO_SCALE_MAX - PM3D_HERO_SCALE_MIN)) * 100;
+      knob.style.setProperty('--hero-scale-pct', `${pct}%`);
+    }
+  };
+
+  const emit = () => { onSync?.(); };
+  range.addEventListener('input', () => { sync(range.value); emit(); });
+  input.addEventListener('input', () => { sync(input.value); emit(); });
+  input.addEventListener('change', () => { sync(input.value); emit(); });
+  sync(input.value || range.value || 1);
+}
+
+function readPm3dStoredLightColor(modal, sel, lightingPreset, defaults) {
+  const raw = String(modal.querySelector(sel)?.value || '').trim();
+  const def = (defaults[lightingPreset] || defaults.studio || '').toLowerCase();
+  const norm = raw.startsWith('#') ? raw.toLowerCase() : (raw ? `#${raw}`.toLowerCase() : '');
+  if (!norm || norm === def) return '';
+  return norm;
+}
+
+function readPm3dFieldNum(modal, sel, fallback) {
+  const el = modal.querySelector(sel);
+  if (!el || el.disabled) return fallback;
+  const v = Number(el.value);
+  return Number.isFinite(v) ? v : fallback;
+}
+
+function readPm3dPresentationFields(modal, existing = {}) {
+  const quality = modal.querySelector('#pmModel3dQuality')?.value || existing.quality || 'high';
+  const isHigh = quality !== 'standard';
+  const shadowPreset = isHigh
+    ? (modal.querySelector('#pmModel3dShadowPreset')?.value || existing.shadowPreset || 'natural')
+    : 'none';
+  const groundOn = isHigh && shadowPreset !== 'none'
+    && modal.querySelector('#pmModel3dGroundShadows')?.checked !== false;
+  const hasProduct = !!PM3D_SHADOW_PRESET_HAS_PRODUCT[shadowPreset];
+  const readNum = (sel, fallback) => readPm3dFieldNum(modal, sel, fallback);
+  return {
+    quality,
+    lightingPreset: modal.querySelector('#pmModel3dLighting')?.value || existing.lightingPreset || 'studio',
+    envPreset: modal.querySelector('#pmModel3dEnv')?.value || existing.envPreset || 'room',
+    shadowPreset,
+    shadows: shadowPreset !== 'none',
+    groundShadows: isHigh && shadowPreset !== 'none'
+      ? modal.querySelector('#pmModel3dGroundShadows')?.checked !== false
+      : false,
+    keyLightColor: readPm3dStoredLightColor(modal, '#pmModel3dKeyLightColor', modal.querySelector('#pmModel3dLighting')?.value || 'studio', PM3D_DEFAULT_KEY_LIGHT),
+    fillLightIntensity: readNum('#pmModel3dFillLightIntensity', existing.fillLightIntensity ?? 1),
+    rimLightIntensity: readNum('#pmModel3dRimLightIntensity', existing.rimLightIntensity ?? 1),
+    fillLightColor: readPm3dStoredLightColor(modal, '#pmModel3dFillLightColor', modal.querySelector('#pmModel3dLighting')?.value || 'studio', PM3D_DEFAULT_FILL_LIGHT),
+    rimLightColor: readPm3dStoredLightColor(modal, '#pmModel3dRimLightColor', modal.querySelector('#pmModel3dLighting')?.value || 'studio', PM3D_DEFAULT_RIM_LIGHT),
+    detailLevel: modal.querySelector('#pmModel3dDetailLevel')?.value || existing.detailLevel || 'auto',
+    exposure: readNum('#pmModel3dExposure', existing.exposure ?? (isHigh ? 1.08 : 1)),
+    envIntensity: readNum('#pmModel3dEnvIntensity', existing.envIntensity ?? (isHigh ? 1.35 : 1.05)),
+    shadowOpacity: groundOn
+      ? readNum('#pmModel3dGroundShadowOpacity', existing.groundShadowOpacity ?? existing.shadowOpacity ?? 0.42)
+      : (existing.groundShadowOpacity ?? existing.shadowOpacity ?? 0.42),
+    groundShadowOpacity: groundOn
+      ? readNum('#pmModel3dGroundShadowOpacity', existing.groundShadowOpacity ?? existing.shadowOpacity ?? 0.42)
+      : (existing.groundShadowOpacity ?? existing.shadowOpacity ?? 0.42),
+    productShadowOpacity: hasProduct
+      ? readNum('#pmModel3dProductShadowOpacity', existing.productShadowOpacity ?? existing.shadowOpacity ?? 0.42)
+      : (existing.productShadowOpacity ?? existing.shadowOpacity ?? 0.42),
+    saturation: readNum('#pmModel3dSaturation', existing.saturation ?? 1)
+  };
+}
+
+function getPm3dProductId(modal) {
+  return slugifyProductId(
+    (modal.querySelector('#pmId')?.value || '').trim()
+    || (modal.querySelector('#pmName')?.value || '').trim()
+    || 'product'
+  );
+}
+
+function getPm3dResourceDir(modal) {
+  const explicit = (modal.querySelector('#pmModel3dResourceDir')?.value || '').trim().replace(/^\/+/, '');
+  if (explicit) return explicit.endsWith('/') ? explicit : `${explicit}/`;
+  const modelPath = (modal.querySelector('#pmModel3dPath')?.value || '').trim().replace(/^\/+/, '');
+  if (modelPath.includes('/')) return modelPath.slice(0, modelPath.lastIndexOf('/') + 1);
+  return `assets/products/3d/${getPm3dProductId(modal)}/`;
+}
+
+function applyPm3dUploadResponse(modal, model3d = {}) {
+  if (model3d.modelPath) {
+    modal.querySelector('#pmModel3dPath').value = model3d.modelPath;
+    if (modal.querySelector('#pmModel3dResourceDir')) {
+      modal.querySelector('#pmModel3dResourceDir').value = model3d.resourceDir
+        || (model3d.modelPath.includes('/') ? model3d.modelPath.slice(0, model3d.modelPath.lastIndexOf('/') + 1) : '');
+    }
+  }
+  if (model3d.resourceDir) modal.querySelector('#pmModel3dResourceDir').value = model3d.resourceDir;
+  if (Object.prototype.hasOwnProperty.call(model3d, 'materialPath')) {
+    modal.querySelector('#pmModel3dMaterial').value = model3d.materialPath || '';
+  }
+  if (model3d.posterPath) modal.querySelector('#pmModel3dPoster').value = model3d.posterPath;
+  if (model3d.modelPath) syncPm3dFormatFromPath(modal);
+  else if (model3d.format) modal.querySelector('#pmModel3dFormat').value = model3d.format;
+  if (model3d.quality && modal.querySelector('#pmModel3dQuality')) {
+    modal.querySelector('#pmModel3dQuality').value = model3d.quality;
+  }
+  if (modal.querySelector('#pmModel3dPath')?.value) modal.querySelector('#pmModel3dEnabled').checked = true;
+  const uploadedPath = String(model3d.modelPath || '').toLowerCase();
+  if (uploadedPath.endsWith('.glb') || uploadedPath.endsWith('.gltf')) {
+    const matInput = modal.querySelector('#pmModel3dMaterial');
+    if (matInput) matInput.value = '';
+  }
+  syncPm3dFormatFromPath(modal);
+  refreshPm3dStatus(modal);
+  schedulePm3dPreviewReload(modal);
+}
+
+function setPm3dDropCardState(modal, kind, state) {
+  const card = modal.querySelector(`[data-pm3d-drop="${kind}"]`);
+  if (!card) return;
+  card.classList.toggle('is-uploading', state === 'uploading');
+  card.classList.toggle('is-dragover', state === 'dragover');
+}
+
+let pm3dPreviewDebounce = null;
+let pm3dPreviewApplyDebounce = null;
+let pm3dPreviewModulePromise = null;
+
+function ensureAdmin3dPreviewReady() {
+  if (window.Admin3dPreview?.getAdmin3dPreview) return Promise.resolve(true);
+  if (!pm3dPreviewModulePromise) {
+    pm3dPreviewModulePromise = import('/admin-3d-preview.js?v=15')
+      .then(() => !!window.Admin3dPreview?.getAdmin3dPreview)
+      .catch((err) => {
+        console.warn('Admin 3D preview module:', err);
+        if (typeof NEB !== 'undefined' && NEB.toast) {
+          NEB.toast('3D-preview module kon niet laden — ververs de pagina', 'error');
+        }
+        return false;
+      });
+  }
+  return pm3dPreviewModulePromise;
+}
+
+function schedulePm3dPreviewReload(modal) {
+  if (!modal) return;
+  clearTimeout(pm3dPreviewDebounce);
+  clearTimeout(pm3dPreviewApplyDebounce);
+  pm3dPreviewDebounce = setTimeout(async () => {
+    const section3d = modal.querySelector('.prod-modal-section--3d');
+    if (!section3d || section3d.hidden) return;
+    if (!(await ensureAdmin3dPreviewReady())) return;
+    const canvas = modal.querySelector('#pmModel3dPreviewCanvas');
+    const preview = window.Admin3dPreview.getAdmin3dPreview(canvas);
+    if (!preview) return;
+    preview.bindModal(modal);
+    preview.resize();
+    try {
+      await preview.reloadFromModal(modal);
+    } catch (err) {
+      console.warn('3D preview reload:', err);
+    }
+  }, 120);
+}
+
+function schedulePm3dPreviewApply(modal) {
+  if (!modal) return;
+  clearTimeout(pm3dPreviewApplyDebounce);
+  pm3dPreviewApplyDebounce = setTimeout(async () => {
+    const section3d = modal.querySelector('.prod-modal-section--3d');
+    if (!section3d || section3d.hidden) return;
+    if (!(await ensureAdmin3dPreviewReady())) return;
+    const canvas = modal.querySelector('#pmModel3dPreviewCanvas');
+    const preview = window.Admin3dPreview.getAdmin3dPreview(canvas);
+    if (!preview) return;
+    preview.bindModal(modal);
+    const out = preview.applySettingsFromModal(modal);
+    if (out?.catch) {
+      out.catch(() => schedulePm3dPreviewReload(modal));
+    }
+  }, 16);
+}
+
+function bindProduct3dModalUi(modal, ctx = {}) {
+  refreshPm3dStatus(modal);
+  const applyPreviewLive = () => {
+    syncPm3dPresentationControls(modal);
+    syncPm3dPreviewScopeUi(modal);
+    refreshPm3dStatus(modal);
+    schedulePm3dPreviewApply(modal);
+  };
+  const rerenderPreview = () => {
+    refreshPm3dStatus(modal);
+    const section3d = modal.querySelector('.prod-modal-section--3d');
+    if (section3d && !section3d.hidden) schedulePm3dPreviewReload(modal);
+  };
+  ['#pmModel3dPath', '#pmModel3dPoster', '#pmModel3dMaterial', '#pmModel3dResourceDir'].forEach((sel) => {
+    modal.querySelector(sel)?.addEventListener('input', rerenderPreview);
+  });
+  modal.querySelector('#pmModel3dFormat')?.addEventListener('change', rerenderPreview);
+  modal.querySelector('#pmModel3dPath')?.addEventListener('change', () => {
+    syncPm3dFormatFromPath(modal);
+    rerenderPreview();
+  });
+  modal.querySelector('#pmModel3dEnabled')?.addEventListener('change', () => {
+    refreshPm3dStatus(modal);
+    schedulePm3dPreviewReload(modal);
+  });
+  modal.querySelector('#pmModel3dQuality')?.addEventListener('change', () => {
+    applyPreviewLive();
+    schedulePm3dPreviewReload(modal);
+  });
+  ['#pmModel3dLighting', '#pmModel3dEnv', '#pmModel3dShadowPreset', '#pmModel3dGroundShadows', '#pmModel3dDetailLevel'].forEach((sel) => {
+    modal.querySelector(sel)?.addEventListener('change', () => {
+      if (sel === '#pmModel3dLighting') {
+        const lighting = modal.querySelector('#pmModel3dLighting')?.value || 'studio';
+        [
+          ['#pmModel3dKeyLightColor', PM3D_DEFAULT_KEY_LIGHT],
+          ['#pmModel3dFillLightColor', PM3D_DEFAULT_FILL_LIGHT],
+          ['#pmModel3dRimLightColor', PM3D_DEFAULT_RIM_LIGHT]
+        ].forEach(([id, map]) => {
+          const el = modal.querySelector(id);
+          if (el && !el.dataset.custom) el.value = map[lighting] || map.studio;
+        });
+      }
+      syncPm3dShadowPresetUi(modal);
+      applyPreviewLive();
+      if (sel === '#pmModel3dDetailLevel') schedulePm3dPreviewReload(modal);
+    });
+  });
+  ['#pmModel3dKeyLightColor', '#pmModel3dFillLightColor', '#pmModel3dRimLightColor'].forEach((sel) => {
+    modal.querySelector(sel)?.addEventListener('input', () => {
+      const el = modal.querySelector(sel);
+      if (el) el.dataset.custom = '1';
+      applyPreviewLive();
+    });
+  });
+  modal.querySelector('#pmModel3dKeyLightPresetBtn')?.addEventListener('click', () => {
+    const lighting = modal.querySelector('#pmModel3dLighting')?.value || 'studio';
+    const el = modal.querySelector('#pmModel3dKeyLightColor');
+    if (el) {
+      el.value = PM3D_DEFAULT_KEY_LIGHT[lighting] || '#ffffff';
+      delete el.dataset.custom;
+    }
+    applyPreviewLive();
+  });
+  modal.querySelector('#pmModel3dFillLightPresetBtn')?.addEventListener('click', () => {
+    const lighting = modal.querySelector('#pmModel3dLighting')?.value || 'studio';
+    const el = modal.querySelector('#pmModel3dFillLightColor');
+    if (el) {
+      el.value = PM3D_DEFAULT_FILL_LIGHT[lighting] || '#f8fafc';
+      delete el.dataset.custom;
+    }
+    applyPreviewLive();
+  });
+  modal.querySelector('#pmModel3dRimLightPresetBtn')?.addEventListener('click', () => {
+    const lighting = modal.querySelector('#pmModel3dLighting')?.value || 'studio';
+    const el = modal.querySelector('#pmModel3dRimLightColor');
+    if (el) {
+      el.value = PM3D_DEFAULT_RIM_LIGHT[lighting] || '#99f6e4';
+      delete el.dataset.custom;
+    }
+    applyPreviewLive();
+  });
+  modal.querySelectorAll('[data-pm3d-look]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      applyPm3dLookPreset(modal, btn.dataset.pm3dLook, applyPreviewLive);
+    });
+  });
+  modal.querySelector('#pmModel3dPresentationReset')?.addEventListener('click', () => {
+    const prevQuality = modal.querySelector('#pmModel3dQuality')?.value;
+    const prevDetail = modal.querySelector('#pmModel3dDetailLevel')?.value;
+    resetPm3dPresentation(modal, () => {
+      applyPreviewLive();
+      const nextQuality = modal.querySelector('#pmModel3dQuality')?.value;
+      const nextDetail = modal.querySelector('#pmModel3dDetailLevel')?.value;
+      if (prevQuality !== nextQuality || prevDetail !== nextDetail) schedulePm3dPreviewReload(modal);
+    });
+  });
+  modal.querySelector('#pmModel3dPresentationCopyApply')?.addEventListener('click', () => {
+    const sel = modal.querySelector('#pmModel3dPresentationCopyFrom');
+    const idx = Number(sel?.value);
+    const products = ctx.draft?.products;
+    if (!Number.isFinite(idx) || !products?.[idx]?.model3d) {
+      NEB.toast('Kies een product met 3D-model', 'error');
+      return;
+    }
+    const prevQuality = modal.querySelector('#pmModel3dQuality')?.value;
+    const prevDetail = modal.querySelector('#pmModel3dDetailLevel')?.value;
+    copyPm3dPresentationFromProduct(
+      modal,
+      products[idx].model3d,
+      { includeHeroMotion: !!modal.querySelector('#pmModel3dCopyIncludeMotion')?.checked },
+      () => {
+        applyPreviewLive();
+        const nextQuality = modal.querySelector('#pmModel3dQuality')?.value;
+        const nextDetail = modal.querySelector('#pmModel3dDetailLevel')?.value;
+        if (prevQuality !== nextQuality || prevDetail !== nextDetail) schedulePm3dPreviewReload(modal);
+        NEB.toast('3D-instellingen overgenomen', 'success');
+      }
+    );
+  });
+  ['#pmModel3dExposure', '#pmModel3dEnvIntensity', '#pmModel3dGroundShadowOpacity', '#pmModel3dProductShadowOpacity', '#pmModel3dSaturation', '#pmModel3dFillLightIntensity', '#pmModel3dRimLightIntensity'].forEach((sel) => {
+    modal.querySelector(sel)?.addEventListener('input', applyPreviewLive);
+    modal.querySelector(sel)?.addEventListener('change', applyPreviewLive);
+  });
+  modal.querySelector('#pmModel3dAutoRotate')?.addEventListener('change', () => {
+    syncPm3dAutoRotateUi(modal);
+    applyPreviewLive();
+  });
+  syncPm3dAutoRotateUi(modal);
+  bindPm3dRangePair(modal, '#pmModel3dRotateSpeedRange', '#pmModel3dRotateSpeed', applyPreviewLive);
+  bindPm3dHeroScalePair(modal, applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dRotYRange', '#pmModel3dRotY', applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dExposureRange', '#pmModel3dExposure', applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dEnvIntensityRange', '#pmModel3dEnvIntensity', applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dGroundShadowOpacityRange', '#pmModel3dGroundShadowOpacity', applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dProductShadowOpacityRange', '#pmModel3dProductShadowOpacity', applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dSaturationRange', '#pmModel3dSaturation', applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dFillLightIntensityRange', '#pmModel3dFillLightIntensity', applyPreviewLive);
+  bindPm3dRangePair(modal, '#pmModel3dRimLightIntensityRange', '#pmModel3dRimLightIntensity', applyPreviewLive);
+  modal.querySelectorAll('[name="pmModel3dPreviewMode"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      const canvas = modal.querySelector('#pmModel3dPreviewCanvas');
+      const preview = window.Admin3dPreview?.getAdmin3dPreview(canvas);
+      if (preview) {
+        preview.setMode(radio.value === 'catalog' ? 'catalog' : 'hero');
+      }
+      syncPm3dPreviewScopeUi(modal);
+    });
+  });
+  syncPm3dPreviewScopeUi(modal);
+  syncPm3dPresentationControls(modal);
+  syncPm3dKnobHints(modal);
+  [
+    '#pmModel3dExposure', '#pmModel3dEnvIntensity', '#pmModel3dGroundShadowOpacity', '#pmModel3dProductShadowOpacity', '#pmModel3dSaturation',
+    '#pmModel3dFillLightIntensity', '#pmModel3dRimLightIntensity',
+    '#pmModel3dRotateSpeed', '#pmModel3dScale', '#pmModel3dRotY'
+  ].forEach((id) => syncPm3dKnobReadout(modal, id));
+  ensureAdmin3dPreviewReady().then(() => {
+    const section3d = modal.querySelector('.prod-modal-section--3d');
+    if (!section3d || section3d.hidden) return;
+    schedulePm3dPreviewReload(modal);
+  });
+}
+
+function bindProduct3dUploadGrid(modal, ctx = {}) {
+  const { isNew, productIdx, draft, persistFn } = ctx;
+
+  const appendPm3dFormContext = (form) => {
+    form.append('productId', getPm3dProductId(modal));
+    const resourceDir = getPm3dResourceDir(modal);
+    if (resourceDir) form.append('resourceDir', resourceDir);
+  };
+
+  const persistUploaded3dPaths = async () => {
+    if (isNew || productIdx < 0 || typeof persistFn !== 'function' || !draft?.products?.[productIdx]) {
+      NEB.toast('Wijziging klaar. Sla het product op om te bewaren.', 'success');
+      return;
+    }
+    const existing = draft.products[productIdx].model3d || {};
+    draft.products[productIdx] = {
+      ...draft.products[productIdx],
+      model3d: {
+        ...existing,
+        enabled: !!modal.querySelector('#pmModel3dEnabled')?.checked,
+        modelPath: (modal.querySelector('#pmModel3dPath')?.value || '').trim().replace(/^\/+/, ''),
+        resourceDir: getPm3dResourceDir(modal).replace(/^\/+/, ''),
+        format: inferModelFormatFromManifest({
+          format: modal.querySelector('#pmModel3dFormat')?.value || existing.format,
+          modelPath: (modal.querySelector('#pmModel3dPath')?.value || '').trim().replace(/^\/+/, '')
+        }),
+        quality: modal.querySelector('#pmModel3dQuality')?.value || existing.quality || 'high',
+        materialPath: (() => {
+          const mp = (modal.querySelector('#pmModel3dPath')?.value || '').trim().replace(/^\/+/, '');
+          const fmt = inferModelFormatFromManifest({ format: existing.format, modelPath: mp });
+          if (fmt !== 'obj') return '';
+          return (modal.querySelector('#pmModel3dMaterial')?.value || '').trim().replace(/^\/+/, '');
+        })(),
+        posterPath: (modal.querySelector('#pmModel3dPoster')?.value || '').trim().replace(/^\/+/, ''),
+        scale: Math.min(20, Math.max(0.01, Number(modal.querySelector('#pmModel3dScale')?.value || existing.scale || 1) || 1)),
+        rotationX: existing.rotationX ?? 0,
+        rotationY: Number(modal.querySelector('#pmModel3dRotY')?.value || existing.rotationY || 0) || 0,
+        rotationZ: existing.rotationZ ?? 0,
+        autoRotate: !!modal.querySelector('#pmModel3dAutoRotate')?.checked,
+        rotateSpeed: Math.min(3, Math.max(0, Number(modal.querySelector('#pmModel3dRotateSpeed')?.value ?? existing.rotateSpeed ?? 0.42) || 0)),
+        ...readPm3dPresentationFields(modal, existing)
+      }
+    };
+    draft.products = normalizeProducts(draft.products);
+    await persistFn('3D-bestanden opgeslagen');
+  };
+
+  const upload3dAsset = async (fieldName, input, button, label, dropKind) => {
+    const file = input?.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    appendPm3dFormContext(form);
+    form.append(fieldName, file, file.name);
+    try {
+      if (button) { button.disabled = true; button.textContent = 'Upload...'; }
+      setPm3dDropCardState(modal, dropKind, 'uploading');
+      const out = await NEB.json('/api/admin/products/3d-assets', { method: 'POST', body: form });
+      applyPm3dUploadResponse(modal, out.model3d || {});
+      await persistUploaded3dPaths();
+    } catch (err) {
+      NEB.toast(err.message || `${label} upload mislukt`, 'error');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = button.dataset.label || label;
+      }
+      setPm3dDropCardState(modal, dropKind, '');
+      if (input) input.value = '';
+    }
+  };
+
+  const upload3dResources = async (input, button) => {
+    const files = [...(input?.files || [])];
+    if (!files.length) return;
+    const form = new FormData();
+    appendPm3dFormContext(form);
+    files.forEach((file) => form.append('resources', file, file.name));
+    try {
+      if (button) { button.disabled = true; button.textContent = 'Upload...'; }
+      const out = await NEB.json('/api/admin/products/3d-assets', { method: 'POST', body: form });
+      applyPm3dUploadResponse(modal, out.model3d || {});
+      await persistUploaded3dPaths();
+    } catch (err) {
+      NEB.toast(err.message || 'Extra bestanden upload mislukt', 'error');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = button.dataset.label || 'Textures & BIN';
+      }
+      if (input) input.value = '';
+    }
+  };
+
+  const bindDropZone = (kind, input, button, label) => {
+    const card = modal.querySelector(`[data-pm3d-drop="${kind}"]`);
+    if (!card || !input) return;
+    const onFiles = (files) => {
+      if (!files?.length) return;
+      const dt = new DataTransfer();
+      dt.items.add(files[0]);
+      input.files = dt.files;
+      upload3dAsset(kind === 'model' ? 'model' : 'poster', input, button, label, kind);
+    };
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      setPm3dDropCardState(modal, kind, 'dragover');
+    });
+    card.addEventListener('dragleave', () => setPm3dDropCardState(modal, kind, ''));
+    card.addEventListener('drop', (e) => {
+      e.preventDefault();
+      setPm3dDropCardState(modal, kind, '');
+      onFiles(e.dataTransfer?.files);
+    });
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button, a, input, label')) return;
+      input.click();
+    });
+  };
+
+  modal.querySelector('#pmModel3dModelBtn')?.addEventListener('click', () => modal.querySelector('#pmModel3dModelFile')?.click());
+  modal.querySelector('#pmModel3dPosterBtn')?.addEventListener('click', () => modal.querySelector('#pmModel3dPosterFile')?.click());
+  modal.querySelector('#pmModel3dResourcesBtn')?.addEventListener('click', () => modal.querySelector('#pmModel3dResourcesFile')?.click());
+  modal.querySelector('#pmModel3dMaterialBtn')?.addEventListener('click', () => modal.querySelector('#pmModel3dMaterialFile')?.click());
+  modal.querySelector('#pmModel3dModelFile')?.addEventListener('change', (e) => upload3dAsset('model', e.target, modal.querySelector('#pmModel3dModelBtn'), 'Model', 'model'));
+  modal.querySelector('#pmModel3dPosterFile')?.addEventListener('change', (e) => upload3dAsset('poster', e.target, modal.querySelector('#pmModel3dPosterBtn'), 'Poster', 'poster'));
+  modal.querySelector('#pmModel3dResourcesFile')?.addEventListener('change', (e) => upload3dResources(e.target, modal.querySelector('#pmModel3dResourcesBtn')));
+  modal.querySelector('#pmModel3dMaterialFile')?.addEventListener('change', (e) => upload3dAsset('material', e.target, modal.querySelector('#pmModel3dMaterialBtn'), 'Materiaal', 'material'));
+
+  bindDropZone('model', modal.querySelector('#pmModel3dModelFile'), modal.querySelector('#pmModel3dModelBtn'), 'Model');
+  bindDropZone('poster', modal.querySelector('#pmModel3dPosterFile'), modal.querySelector('#pmModel3dPosterBtn'), 'Poster');
+
+  modal.querySelector('#pmModel3dModelClear')?.addEventListener('click', async () => {
+    modal.querySelector('#pmModel3dPath').value = '';
+    modal.querySelector('#pmModel3dEnabled').checked = false;
+    refreshPm3dStatus(modal);
+    try {
+      await persistUploaded3dPaths();
+    } catch { /* toast in persist */ }
+  });
+  modal.querySelector('#pmModel3dPosterClear')?.addEventListener('click', async () => {
+    modal.querySelector('#pmModel3dPoster').value = '';
+    refreshPm3dStatus(modal);
+    schedulePm3dPreviewReload(modal);
+    try {
+      await persistUploaded3dPaths();
+    } catch { /* toast in persist */ }
+  });
+
+  modal.querySelector('#pmModel3dPosterSnapshotBtn')?.addEventListener('click', async () => {
+    const canvas = modal.querySelector('#pmModel3dPreviewCanvas');
+    const preview = window.Admin3dPreview?.getAdmin3dPreview(canvas);
+    const btn = modal.querySelector('#pmModel3dPosterSnapshotBtn');
+    if (!preview) {
+      NEB.toast('3D-preview nog niet klaar — upload eerst een model', 'error');
+      return;
+    }
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = 'Snapshot...'; }
+      const blob = await preview.capturePosterBlob();
+      const form = new FormData();
+      appendPm3dFormContext(form);
+      form.append('poster', blob, `poster-snapshot-${Date.now()}.png`);
+      const out = await NEB.json('/api/admin/products/3d-assets', { method: 'POST', body: form });
+      applyPm3dUploadResponse(modal, out.model3d || {});
+      await persistUploaded3dPaths();
+      NEB.toast('Poster opgeslagen vanuit 3D-view', 'success');
+      schedulePm3dPreviewReload(modal);
+    } catch (err) {
+      NEB.toast(err.message || 'Snapshot mislukt', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = btn.dataset.label || 'Poster uit 3D-view';
+      }
+    }
+  });
+}
+
+function renderProduct3dModalSection(product, ctx = {}) {
+  const m3d = product?.model3d || {};
+  const copySources = Array.isArray(ctx.copySources) ? ctx.copySources : [];
+  const modelPath = String(m3d.modelPath || '').trim();
+  const posterPath = String(m3d.posterPath || '').trim();
+  const fmt = String(m3d.format || 'glb').toLowerCase();
+  const rotateSpeed = m3d.rotateSpeed ?? 0.42;
+  const scale = m3d.scale ?? 1;
+  const rotY = m3d.rotationY ?? 0;
+  const lightingPreset = String(m3d.lightingPreset || 'studio').toLowerCase();
+  const envPreset = String(m3d.envPreset || 'room').toLowerCase();
+  const exposure = m3d.exposure ?? 1.08;
+  const envIntensity = m3d.envIntensity ?? 1.35;
+  const groundShadowOpacity = m3d.groundShadowOpacity ?? m3d.shadowOpacity ?? 0.42;
+  const productShadowOpacity = m3d.productShadowOpacity ?? m3d.shadowOpacity ?? 0.42;
+  const saturation = m3d.saturation ?? 1;
+  const qualityHigh = String(m3d.quality || 'high').toLowerCase() !== 'standard';
+  const shadowPreset = derivePm3dShadowPreset(m3d, qualityHigh);
+  const shadowGroundDisabled = shadowPreset === 'none';
+  const shadowProductDisabled = shadowPreset === 'none' || !PM3D_SHADOW_PRESET_HAS_PRODUCT[shadowPreset];
+  const groundShadows = m3d.groundShadows !== false;
+  const keyLightColor = String(m3d.keyLightColor || '').trim();
+  const keyLightPicker = pm3dHexForLighting(lightingPreset, PM3D_DEFAULT_KEY_LIGHT, keyLightColor);
+  const fillLightPicker = pm3dHexForLighting(lightingPreset, PM3D_DEFAULT_FILL_LIGHT, m3d.fillLightColor);
+  const rimLightPicker = pm3dHexForLighting(lightingPreset, PM3D_DEFAULT_RIM_LIGHT, m3d.rimLightColor);
+  const fillLightIntensity = m3d.fillLightIntensity ?? 1;
+  const rimLightIntensity = m3d.rimLightIntensity ?? 1;
+  const detailLevel = String(m3d.detailLevel || 'auto').toLowerCase();
+  const copyOptionsHtml = copySources.length
+    ? copySources.map((src) => `<option value="${escAttr(src.idx)}">${escText(src.label)}</option>`).join('')
+    : '<option value="">Geen ander 3D-product</option>';
+  const enabled3d = m3d.enabled !== false && !!modelPath;
+  const posterThumbHtml = posterPath
+    ? `<img src="/${escAttr(posterPath.replace(/^\/+/, ''))}" alt="" width="48" height="48">`
+    : '';
+
+  return `
+        <div class="prod-modal-section prod-modal-section--3d" data-wizard-step="3d">
+          <div class="prod-3d-head">
+            <h4 class="prod-modal-section-title">3D presentatie</h4>
+            <label class="prod-3d-enable">
+              <input type="checkbox" id="pmModel3dEnabled" ${enabled3d ? 'checked' : ''}>
+              <span>3D tonen in shop</span>
+            </label>
+          </div>
+          <p class="prod-3d-lead muted compact">Upload een 3D-model voor de interactieve preview. <strong>GLB</strong> werkt het makkelijkst (textures ingebakken). Geen 3D? Gebruik alleen een poster als snelle 2D-fallback.</p>
+          <div class="prod-3d-status" id="pmModel3dStatus" aria-live="polite"></div>
+          <div class="prod-3d-studio" id="pmModel3dPreviewWrap">
+            <div class="prod-3d-studio-preview">
+              <div class="prod-3d-live-preview-head">
+                <strong>Live preview</strong>
+                <div class="prod-3d-preview-modes" role="group" aria-label="Previewmodus">
+                  <label class="prod-3d-preview-mode"><input type="radio" name="pmModel3dPreviewMode" value="hero" checked> Hero</label>
+                  <label class="prod-3d-preview-mode"><input type="radio" name="pmModel3dPreviewMode" value="catalog"> Catalogus</label>
+                </div>
+              </div>
+              <p class="muted compact prod-3d-scope-legend" id="pmModel3dScopeLegend">
+                <span class="prod-3d-scope-badge prod-3d-scope-badge--shared">Gedeeld</span> licht &amp; materiaal
+                <span class="prod-3d-scope-badge prod-3d-scope-badge--hero">Hero</span> schaal &amp; animatie
+                <span class="prod-3d-scope-badge prod-3d-scope-badge--catalog">Catalogus</span> afgeleide pose
+              </p>
+              <div class="prod-3d-preview-stage">
+                <canvas id="pmModel3dPreviewCanvas" width="560" height="320" aria-label="3D productpreview"></canvas>
+                <div class="prod-3d-preview-controls" role="toolbar" aria-label="Preview bediening">
+                  <button type="button" class="prod-3d-preview-zoom-btn" id="pmModel3dPreviewZoomIn" aria-label="Inzoomen" title="Inzoomen">+</button>
+                  <button type="button" class="prod-3d-preview-zoom-btn" id="pmModel3dPreviewZoomOut" aria-label="Uitzoomen" title="Uitzoomen">−</button>
+                  <button type="button" class="prod-3d-preview-zoom-btn prod-3d-preview-zoom-btn--reset" id="pmModel3dPreviewZoomReset" aria-label="Weergave herstellen" title="Zoom en draaiing herstellen">↺</button>
+                </div>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm prod-3d-snapshot-btn" id="pmModel3dPosterSnapshotBtn" data-label="Poster uit 3D-view">Poster uit 3D-view</button>
+            </div>
+            <fieldset class="prod-3d-settings prod-3d-studio-panel prod-3d-studio-panel--compact${qualityHigh ? '' : ' prod-3d-settings--standard'}">
+              <legend class="prod-3d-studio-panel-title">Weergave in de shop <span class="prod-3d-studio-live-meta muted compact" id="pm3dSettingsLiveMeta" aria-live="polite">${escText(qualityHigh ? `Hoog · ${lightingPreset}` : 'Standaard · vlak licht')}</span></legend>
+              <div class="prod-3d-studio-quick" role="toolbar" aria-label="Look presets en model">
+                <div class="prod-3d-looks-toolbar prod-3d-looks-toolbar--compact">
+                  ${Object.entries(PM3D_LOOK_PRESETS).map(([id, p]) =>
+                    `<button type="button" class="btn btn-ghost btn-sm" data-pm3d-look="${escAttr(id)}">${escText(p.label)}</button>`
+                  ).join('')}
+                  <button type="button" class="btn btn-ghost btn-sm" id="pmModel3dPresentationReset">Herstellen</button>
+                </div>
+                <div class="prod-3d-settings-toolbar prod-3d-settings-toolbar--compact">
+                  <label class="prod-3d-settings-chip prod-3d-settings-chip--sm">
+                    <span class="prod-3d-settings-chip-label">Kwaliteit</span>
+                    <select id="pmModel3dQuality">
+                      <option value="high" ${qualityHigh ? 'selected' : ''}>Hoog (PBR)</option>
+                      <option value="standard" ${!qualityHigh ? 'selected' : ''}>Standaard</option>
+                    </select>
+                  </label>
+                  <label class="prod-3d-settings-chip prod-3d-settings-chip--sm">
+                    <span class="prod-3d-settings-chip-label">Type</span>
+                    <select id="pmModel3dFormat" title="Meestal automatisch na upload">
+                      <option value="glb" ${fmt === 'glb' ? 'selected' : ''}>GLB</option>
+                      <option value="gltf" ${fmt === 'gltf' ? 'selected' : ''}>GLTF</option>
+                      <option value="obj" ${fmt === 'obj' ? 'selected' : ''}>OBJ</option>
+                      <option value="stl" ${fmt === 'stl' ? 'selected' : ''}>STL</option>
+                      <option value="fbx" ${fmt === 'fbx' ? 'selected' : ''}>FBX</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="prod-3d-presentation-actions prod-3d-presentation-actions--compact">
+                <label class="prod-3d-copy-row">
+                  <span class="prod-3d-settings-chip-label">Kopiëren</span>
+                  <select id="pmModel3dPresentationCopyFrom" class="prod-3d-copy-select">${copyOptionsHtml}</select>
+                  <button type="button" class="btn btn-ghost btn-sm" id="pmModel3dPresentationCopyApply">Toepassen</button>
+                </label>
+                <label class="prod-3d-copy-motion">
+                  <input type="checkbox" id="pmModel3dCopyIncludeMotion">
+                  <span class="muted compact">+ hero-grootte &amp; rotatie</span>
+                </label>
+              </div>
+              <details class="prod-3d-settings-group" open>
+                <summary>Licht &amp; materiaal</summary>
+                <div class="prod-3d-settings-group-body prod-3d-settings-row--quality">
+                  <label class="prod-3d-settings-chip">
+                    <span class="prod-3d-settings-chip-label">Belichting</span>
+                    <select id="pmModel3dLighting">
+                      <option value="studio" ${lightingPreset === 'studio' ? 'selected' : ''}>Studio</option>
+                      <option value="soft" ${lightingPreset === 'soft' ? 'selected' : ''}>Zacht</option>
+                      <option value="dramatic" ${lightingPreset === 'dramatic' ? 'selected' : ''}>Contrast</option>
+                    </select>
+                  </label>
+                  <label class="prod-3d-settings-chip">
+                    <span class="prod-3d-settings-chip-label">Omgeving</span>
+                    <select id="pmModel3dEnv">
+                      <option value="room" ${envPreset === 'room' ? 'selected' : ''}>Studio kamer</option>
+                      <option value="neutral" ${envPreset === 'neutral' ? 'selected' : ''}>Neutraal</option>
+                      <option value="warm" ${envPreset === 'warm' ? 'selected' : ''}>Warm</option>
+                      <option value="cool" ${envPreset === 'cool' ? 'selected' : ''}>Koel</option>
+                      <option value="none" ${envPreset === 'none' ? 'selected' : ''}>Geen</option>
+                    </select>
+                  </label>
+                  <label class="prod-3d-settings-chip">
+                    <span class="prod-3d-settings-chip-label">Schaduw</span>
+                    <select id="pmModel3dShadowPreset" title="Per product — opgeslagen in de shop">
+                      <option value="none" ${shadowPreset === 'none' ? 'selected' : ''}>Geen</option>
+                      <option value="soft" ${shadowPreset === 'soft' ? 'selected' : ''}>Zacht (contact)</option>
+                      <option value="natural" ${shadowPreset === 'natural' ? 'selected' : ''}>Natuurlijk</option>
+                      <option value="studio" ${shadowPreset === 'studio' ? 'selected' : ''}>Studio</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="muted compact prod-3d-shadow-hint" id="pmModel3dShadowHint">${escText(PM3D_SHADOW_HINTS[shadowPreset] || PM3D_SHADOW_HINTS.natural)}</p>
+                <div class="prod-3d-ground-shadow-row prod-3d-rotate-toggle-row prod-3d-rotate-toggle-row--compact${shadowPreset === 'none' ? ' prod-3d-knob--disabled' : ''}">
+                  <span class="prod-3d-settings-chip-label">Grond</span>
+                  <label class="prod-3d-switch" title="Vloer/contact-schaduw; productschaduw blijft bij Natuurlijk/Studio">
+                    <input type="checkbox" id="pmModel3dGroundShadows" ${groundShadows ? 'checked' : ''}${shadowPreset === 'none' ? ' disabled' : ''}>
+                    <span class="prod-3d-switch-track" aria-hidden="true"><span class="prod-3d-switch-thumb"></span></span>
+                    <span class="prod-3d-switch-text">Aan</span>
+                  </label>
+                </div>
+                <div class="prod-3d-light-colors prod-3d-light-colors--compact" data-pm3d-scope="shared">
+                  <label class="prod-3d-settings-chip prod-3d-keylight-chip">
+                    <span class="prod-3d-settings-chip-label">Studio</span>
+                    <span class="prod-3d-color-input-wrap">
+                      <input type="color" id="pmModel3dKeyLightColor" value="${escAttr(keyLightPicker)}" aria-label="Kleur hoofdlicht"${keyLightColor ? ' data-custom="1"' : ''}>
+                      <button type="button" class="btn btn-ghost btn-sm prod-3d-preset-color-btn" id="pmModel3dKeyLightPresetBtn">Preset</button>
+                    </span>
+                  </label>
+                  <label class="prod-3d-settings-chip prod-3d-keylight-chip">
+                    <span class="prod-3d-settings-chip-label">Vul</span>
+                    <span class="prod-3d-color-input-wrap">
+                      <input type="color" id="pmModel3dFillLightColor" value="${escAttr(fillLightPicker)}" aria-label="Kleur vullicht"${m3d.fillLightColor ? ' data-custom="1"' : ''}>
+                      <button type="button" class="btn btn-ghost btn-sm prod-3d-preset-color-btn" id="pmModel3dFillLightPresetBtn">Preset</button>
+                    </span>
+                  </label>
+                  <label class="prod-3d-settings-chip prod-3d-keylight-chip">
+                    <span class="prod-3d-settings-chip-label">Rand</span>
+                    <span class="prod-3d-color-input-wrap">
+                      <input type="color" id="pmModel3dRimLightColor" value="${escAttr(rimLightPicker)}" aria-label="Kleur randlicht"${m3d.rimLightColor ? ' data-custom="1"' : ''}>
+                      <button type="button" class="btn btn-ghost btn-sm prod-3d-preset-color-btn" id="pmModel3dRimLightPresetBtn">Preset</button>
+                    </span>
+                  </label>
+                </div>
+                <label class="prod-3d-settings-chip prod-3d-settings-chip--detail prod-3d-settings-chip--detail-inline" data-pm3d-scope="shared">
+                  <span class="prod-3d-settings-chip-label">Detail</span>
+                  <select id="pmModel3dDetailLevel" title="Pixelratio en schaduwresolutie">
+                    <option value="auto" ${detailLevel === 'auto' ? 'selected' : ''}>Auto</option>
+                    <option value="low" ${detailLevel === 'low' ? 'selected' : ''}>Laag</option>
+                    <option value="medium" ${detailLevel === 'medium' ? 'selected' : ''}>Normaal</option>
+                    <option value="high" ${detailLevel === 'high' ? 'selected' : ''}>Hoog</option>
+                  </select>
+                </label>
+                <div class="prod-3d-settings-knobs prod-3d-settings-knobs--presentation">
+                  <div class="prod-3d-knob" data-pm3d-scope="shared">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dExposureRange">Helderheid</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dExposure"></span>
+                    </div>
+                    <input type="range" id="pmModel3dExposureRange" min="0.65" max="1.65" step="0.02" value="${escAttr(exposure)}" aria-label="Helderheid">
+                    <input type="number" step="0.02" min="0.65" max="1.65" id="pmModel3dExposure" class="prod-3d-knob-val" value="${escAttr(exposure)}" tabindex="-1" aria-hidden="true">
+                    <p class="muted compact prod-3d-knob-hint" data-pm3d-hint-for="pmModel3dExposure"></p>
+                  </div>
+                  <div class="prod-3d-knob" data-pm3d-scope="shared">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dEnvIntensityRange">Reflectie</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dEnvIntensity"></span>
+                    </div>
+                    <input type="range" id="pmModel3dEnvIntensityRange" min="0.5" max="2.5" step="0.05" value="${escAttr(envIntensity)}" aria-label="Reflectie" title="Glans en omgevingsreflectie; bij omgeving Geen vooral direct licht.">
+                    <input type="number" step="0.05" min="0.5" max="2.5" id="pmModel3dEnvIntensity" class="prod-3d-knob-val" value="${escAttr(envIntensity)}" tabindex="-1" aria-hidden="true">
+                    <p class="muted compact prod-3d-knob-hint" data-pm3d-hint-for="pmModel3dEnvIntensity"></p>
+                  </div>
+                  <div class="prod-3d-knob${shadowGroundDisabled ? ' prod-3d-knob--disabled' : ''}" data-pm3d-scope="shared">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dGroundShadowOpacityRange">Schaduw grond</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dGroundShadowOpacity"></span>
+                    </div>
+                    <input type="range" id="pmModel3dGroundShadowOpacityRange" min="0.12" max="0.85" step="0.02" value="${escAttr(groundShadowOpacity)}" aria-label="Schaduw grond"${shadowGroundDisabled ? ' disabled' : ''}>
+                    <input type="number" step="0.02" min="0.12" max="0.85" id="pmModel3dGroundShadowOpacity" class="prod-3d-knob-val" value="${escAttr(groundShadowOpacity)}" tabindex="-1" aria-hidden="true"${shadowGroundDisabled ? ' disabled' : ''}>
+                    <p class="muted compact prod-3d-knob-hint" data-pm3d-hint-for="pmModel3dGroundShadowOpacity"></p>
+                  </div>
+                  <div class="prod-3d-knob${shadowProductDisabled ? ' prod-3d-knob--disabled' : ''}" data-pm3d-scope="shared">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dProductShadowOpacityRange">Schaduw product</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dProductShadowOpacity"></span>
+                    </div>
+                    <input type="range" id="pmModel3dProductShadowOpacityRange" min="0.12" max="0.85" step="0.02" value="${escAttr(productShadowOpacity)}" aria-label="Schaduw product"${shadowProductDisabled ? ' disabled' : ''}>
+                    <input type="number" step="0.02" min="0.12" max="0.85" id="pmModel3dProductShadowOpacity" class="prod-3d-knob-val" value="${escAttr(productShadowOpacity)}" tabindex="-1" aria-hidden="true"${shadowProductDisabled ? ' disabled' : ''}>
+                    <p class="muted compact prod-3d-knob-hint" data-pm3d-hint-for="pmModel3dProductShadowOpacity"></p>
+                  </div>
+                  <div class="prod-3d-knob" data-pm3d-scope="shared">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dSaturationRange">Verzadiging</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dSaturation"></span>
+                    </div>
+                    <input type="range" id="pmModel3dSaturationRange" min="0.5" max="1.5" step="0.05" value="${escAttr(saturation)}" aria-label="Verzadiging">
+                    <input type="number" step="0.05" min="0.5" max="1.5" id="pmModel3dSaturation" class="prod-3d-knob-val" value="${escAttr(saturation)}" tabindex="-1" aria-hidden="true" title="1 = origineel; werkt ook op texturen">
+                    <p class="muted compact prod-3d-knob-hint" data-pm3d-hint-for="pmModel3dSaturation"></p>
+                  </div>
+                  <div class="prod-3d-knob" data-pm3d-scope="shared">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dFillLightIntensityRange">Vullicht</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dFillLightIntensity"></span>
+                    </div>
+                    <input type="range" id="pmModel3dFillLightIntensityRange" min="0.5" max="2" step="0.05" value="${escAttr(fillLightIntensity)}" aria-label="Vullicht intensiteit">
+                    <input type="number" step="0.05" min="0.5" max="2" id="pmModel3dFillLightIntensity" class="prod-3d-knob-val" value="${escAttr(fillLightIntensity)}" tabindex="-1" aria-hidden="true">
+                    <p class="muted compact prod-3d-knob-hint" data-pm3d-hint-for="pmModel3dFillLightIntensity"></p>
+                  </div>
+                  <div class="prod-3d-knob" data-pm3d-scope="shared">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dRimLightIntensityRange">Randlicht</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dRimLightIntensity"></span>
+                    </div>
+                    <input type="range" id="pmModel3dRimLightIntensityRange" min="0.5" max="2" step="0.05" value="${escAttr(rimLightIntensity)}" aria-label="Randlicht intensiteit">
+                    <input type="number" step="0.05" min="0.5" max="2" id="pmModel3dRimLightIntensity" class="prod-3d-knob-val" value="${escAttr(rimLightIntensity)}" tabindex="-1" aria-hidden="true">
+                    <p class="muted compact prod-3d-knob-hint" data-pm3d-hint-for="pmModel3dRimLightIntensity"></p>
+                  </div>
+                </div>
+              </details>
+              <details class="prod-3d-settings-group">
+                <summary>Hero &amp; animatie</summary>
+                <div class="prod-3d-rotate-toggle-row prod-3d-knob--hero-only" data-pm3d-scope="hero">
+                  <span class="prod-3d-settings-chip-label">Automatisch draaien</span>
+                  <label class="prod-3d-switch" title="Standaard: uit — model blijft in startpositie staan">
+                    <input type="checkbox" id="pmModel3dAutoRotate" ${m3d.autoRotate === true ? 'checked' : ''}>
+                    <span class="prod-3d-switch-track" aria-hidden="true"><span class="prod-3d-switch-thumb"></span></span>
+                    <span class="prod-3d-switch-text" id="pmModel3dAutoRotateLabel">${m3d.autoRotate === true ? 'Aan' : 'Uit (startpositie)'}</span>
+                  </label>
+                </div>
+                <div class="prod-3d-settings-knobs prod-3d-settings-knobs--motion">
+                  <div class="prod-3d-knob prod-3d-knob--hero-only${m3d.autoRotate === true ? '' : ' prod-3d-knob--disabled'}" data-pm3d-scope="hero">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dRotateSpeedRange">Draaisnelheid</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dRotateSpeed"></span>
+                    </div>
+                    <input type="range" id="pmModel3dRotateSpeedRange" min="0" max="3" step="0.05" value="${escAttr(Math.min(3, Math.max(0, rotateSpeed)))}" aria-label="Draaisnelheid"${m3d.autoRotate === true ? '' : ' disabled'}>
+                    <input type="number" step="0.05" min="0" max="3" id="pmModel3dRotateSpeed" class="prod-3d-knob-val" value="${escAttr(rotateSpeed)}" tabindex="-1" aria-hidden="true"${m3d.autoRotate === true ? '' : ' disabled'}>
+                  </div>
+                  <div class="prod-3d-knob prod-3d-knob--hero-scale prod-3d-knob--hero-only" data-pm3d-scope="hero">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dScaleRange">Grootte hero</label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dScale"></span>
+                    </div>
+                    <input type="range" id="pmModel3dScaleRange" min="${PM3D_HERO_SCALE_MIN}" max="${PM3D_HERO_SCALE_MAX}" step="0.05" value="${escAttr(Math.min(PM3D_HERO_SCALE_MAX, Math.max(PM3D_HERO_SCALE_MIN, Number(scale) || 1)))}" aria-label="Grootte hero" aria-valuemin="${PM3D_HERO_SCALE_MIN}" aria-valuemax="${PM3D_HERO_SCALE_MAX}">
+                    <input type="number" step="0.05" min="${PM3D_HERO_SCALE_MIN}" max="${PM3D_HERO_SCALE_MAX}" id="pmModel3dScale" class="prod-3d-knob-val" value="${escAttr(Math.min(PM3D_HERO_SCALE_MAX, Math.max(PM3D_HERO_SCALE_MIN, Number(scale) || 1)))}" tabindex="-1" aria-hidden="true">
+                  </div>
+                  <div class="prod-3d-knob prod-3d-knob--hero-rot prod-3d-knob--hero-only" data-pm3d-scope="hero">
+                    <div class="prod-3d-knob-head">
+                      <label for="pmModel3dRotYRange">Startrotatie <span class="prod-3d-scope-badge prod-3d-scope-badge--catalog">catalogus afgeleid</span></label>
+                      <span class="prod-3d-knob-readout" data-pm3d-readout-for="pmModel3dRotY"></span>
+                    </div>
+                    <input type="range" id="pmModel3dRotYRange" min="-180" max="180" step="1" value="${escAttr(rotY)}" aria-label="Startrotatie">
+                    <input type="number" step="1" min="-180" max="180" id="pmModel3dRotY" class="prod-3d-knob-val" value="${escAttr(rotY)}" tabindex="-1" aria-hidden="true">
+                  </div>
+                </div>
+              </details>
+              <p class="muted compact prod-3d-presentation-hint">Live preview · standaard kwaliteit = geen IBL/schaduw</p>
+            </fieldset>
+          </div>
+          <div class="prod-3d-upload-grid">
+            <div class="prod-3d-upload-card prod-3d-upload-card--primary" data-pm3d-drop="model">
+              <div class="prod-3d-upload-card-head">
+                <strong>3D-model</strong>
+                <span class="prod-3d-format-hint">GLB · GLTF · OBJ · STL · FBX</span>
+              </div>
+              <p class="muted compact">Het hoofdbestand voor hero en productkaarten. Sleep een bestand hierheen of kies via de knop.</p>
+              <div class="prod-3d-file-line">
+                <span class="prod-3d-file-name" id="pmModel3dModelLabel">${escText(modelPath ? pathBasename(modelPath) : 'Nog geen model geüpload')}</span>
+                <div class="prod-3d-file-actions">
+                  <button type="button" class="btn btn-primary btn-sm" id="pmModel3dModelBtn" data-label="Model kiezen">Model kiezen</button>
+                  <button type="button" class="btn btn-ghost btn-sm prod-3d-clear" id="pmModel3dModelClear"${modelPath ? '' : ' hidden'}>Wissen</button>
+                </div>
+              </div>
+              <input type="file" id="pmModel3dModelFile" accept=".glb,.GLB,.gltf,.GLTF,.obj,.OBJ,.stl,.STL,.fbx,.FBX,model/gltf-binary,model/gltf+json,model/stl" hidden>
+            </div>
+            <div class="prod-3d-upload-card" data-pm3d-drop="poster">
+              <div class="prod-3d-upload-card-head">
+                <strong>Poster (2D)</strong>
+                <span class="prod-3d-format-hint">PNG · JPG · WebP</span>
+              </div>
+              <p class="muted compact">Verplicht voor 3D-producten op productkaarten (shop). Upload of maak een snapshot uit de live preview.</p>
+              <div class="prod-3d-file-line">
+                <span class="prod-3d-poster-thumb" id="pmModel3dPosterThumb"${posterThumbHtml ? '' : ' hidden'}>${posterThumbHtml}</span>
+                <span class="prod-3d-file-name" id="pmModel3dPosterLabel">${escText(posterPath ? pathBasename(posterPath) : 'Geen poster — upload of snapshot')}</span>
+                <div class="prod-3d-file-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" id="pmModel3dPosterBtn" data-label="Poster uploaden">Poster uploaden</button>
+                  <button type="button" class="btn btn-ghost btn-sm prod-3d-clear" id="pmModel3dPosterClear"${posterPath ? '' : ' hidden'}>Wissen</button>
+                </div>
+              </div>
+              <input type="file" id="pmModel3dPosterFile" accept="image/*" hidden>
+            </div>
+          </div>
+          <p class="prod-3d-save-hint muted compact">Uploads worden direct opgeslagen bij bestaande producten. Nieuwe producten: klik daarna <strong>Opslaan</strong>.</p>
+          <div class="prod-3d-extra">
+            <span class="prod-3d-extra-label muted compact">Alleen nodig bij sommige formaten:</span>
+            <div class="prod-3d-extra-actions">
+              <button type="button" class="btn btn-ghost btn-sm" id="pmModel3dResourcesBtn" data-label="Textures &amp; BIN">Textures &amp; BIN</button>
+              <span class="prod-3d-extra-item" id="pmModel3dMaterialWrap">
+                <button type="button" class="btn btn-ghost btn-sm" id="pmModel3dMaterialBtn" data-label="Materiaal (.mtl)">Materiaal (.mtl)</button>
+              </span>
+            </div>
+            <p class="muted compact prod-3d-extra-hint">GLTF: upload <code>.bin</code> en textures via “Textures &amp; BIN”. OBJ: upload ook het <code>.mtl</code>-bestand.</p>
+            <input type="file" id="pmModel3dResourcesFile" accept=".bin,.png,.jpg,.jpeg,.webp,.mtl,.ktx2,.hdr,.tga,image/*" multiple hidden>
+            <input type="file" id="pmModel3dMaterialFile" accept=".mtl" hidden>
+          </div>
+          <details class="prod-3d-advanced audit-details">
+            <summary>Technische paden (alleen bij handmatig beheer)</summary>
+            <div class="form-grid-2" style="margin-top:.65rem">
+              <div class="field"><label>Modelpad</label><input id="pmModel3dPath" value="${escAttr(m3d.modelPath || '')}" placeholder="assets/products/3d/…/model.glb"></div>
+              <div class="field"><label>Resource-map</label><input id="pmModel3dResourceDir" value="${escAttr(m3d.resourceDir || '')}" placeholder="assets/products/3d/…/bundle-…/"></div>
+              <div class="field"><label>Materiaalpad</label><input id="pmModel3dMaterial" value="${escAttr(m3d.materialPath || '')}" placeholder="material.mtl"></div>
+              <div class="field"><label>Posterpad</label><input id="pmModel3dPoster" value="${escAttr(m3d.posterPath || '')}" placeholder="poster.webp"></div>
+            </div>
+          </details>
+        </div>`;
+}
+
 function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = null) {
   const isNew = productIdx === -1;
   const p = isNew ? {
     id: '', name: '', description: '', basePrice: null, extraDesignFee: null,
     priceMultiplier: 1, extraDesignFeeMultiplier: 1,
     mockupPath: '', colorHexes: [], sizes: [], colorData: {}, colorPrices: {}, sizePrices: {},
-    enabled: true, isDefault: false, sortOrder: (draft.products || []).length * 10 + 10
+    model3d: {}, enabled: true, isDefault: false, isFeatured: false, sortOrder: (draft.products || []).length * 10 + 10
   } : JSON.parse(JSON.stringify(draft.products[productIdx]));
 
   const normalizeHex = (hex) => {
@@ -2948,7 +4449,7 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
   modal.className = 'modal-overlay';
   const mockupSrc = (p.mockupPath || '').replace(/^\/+/, '');
   modal.innerHTML = `
-    <div class="modal-box prod-modal-box">
+    <div class="modal-box prod-modal-box prod-modal-box--wide">
       <div class="prod-modal-header">
         <h2>${isNew ? 'Nieuw product' : `Bewerk: ${escText(p.name)}`}</h2>
         <button type="button" class="btn btn-ghost btn-sm" id="prodModalClose">✕</button>
@@ -2969,6 +4470,9 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
             </label>
             <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;text-transform:none;letter-spacing:0;color:var(--text)">
               <input type="radio" name="pmDefaultProd" id="pmDefault" ${p.isDefault ? 'checked' : ''}> Default product
+            </label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;text-transform:none;letter-spacing:0;color:var(--text)">
+              <input type="radio" name="pmFeaturedProd" id="pmFeatured" ${p.isFeatured ? 'checked' : ''}> 3D hero product
             </label>
           </div>
         </div>
@@ -2993,6 +4497,16 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
             </div>
           </div>
         </div>
+        ${renderProduct3dModalSection(p, {
+          copySources: (draft.products || [])
+            .map((prod, idx) => ({
+              idx,
+              id: prod?.id,
+              label: prod?.name || prod?.id || `Product ${idx + 1}`,
+              m3d: prod?.model3d
+            }))
+            .filter((src) => src.m3d?.enabled !== false && src.m3d?.modelPath && String(src.id) !== String(p.id))
+        })}
         ${globalColors.length > 0 ? `
         <div class="prod-modal-section">
           <h4 class="prod-modal-section-title">Kleuren voor dit product</h4>
@@ -3019,7 +4533,10 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
   document.body.appendChild(modal);
   modal.classList.add('show');
 
-  const closeModal = () => modal.remove();
+  const closeModal = () => {
+    window.Admin3dPreview?.disposeAdmin3dPreview?.();
+    modal.remove();
+  };
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
   modal.querySelector('#prodModalClose').addEventListener('click', closeModal);
   modal.querySelector('#prodModalCancel').addEventListener('click', closeModal);
@@ -3035,14 +4552,20 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
     basis: '1. Basis',
     prijs: '2. Prijs',
     mockup: '3. Mockup',
-    kleuren: '4. Kleuren',
-    maten: '5. Maten'
+    '3d': '4. 3D mockup',
+    kleuren: '5. Kleuren',
+    maten: '6. Maten'
   };
   const getStepLabel = (section, idx) => {
+    const wizardStep = String(section.dataset.wizardStep || '').toLowerCase();
+    if (wizardStep === '3d' || section.classList.contains('prod-modal-section--3d')) {
+      return stepTitleMap['3d'];
+    }
     const raw = String(section.querySelector('.prod-modal-section-title')?.textContent || '').trim().toLowerCase();
     if (raw.startsWith('basis')) return stepTitleMap.basis;
     if (raw.startsWith('prijs')) return stepTitleMap.prijs;
     if (raw.startsWith('mockup')) return stepTitleMap.mockup;
+    if (raw.startsWith('3d') || raw.includes('presentatie')) return stepTitleMap['3d'];
     if (raw.startsWith('kleuren')) return stepTitleMap.kleuren;
     if (raw.startsWith('maten')) return stepTitleMap.maten;
     return `${idx + 1}. Stap`;
@@ -3057,6 +4580,9 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
     prevBtn.hidden = false;
     nextBtn.hidden = false;
 
+    const is3dSection = (section) => section?.dataset?.wizardStep === '3d'
+      || section?.classList?.contains('prod-modal-section--3d');
+
     const showStep = (idx) => {
       stepIdx = Math.max(0, Math.min(sections.length - 1, idx));
       sections.forEach((section, i) => {
@@ -3067,7 +4593,12 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
       });
       prevBtn.disabled = stepIdx === 0;
       nextBtn.hidden = stepIdx >= sections.length - 1;
-      saveBtn.hidden = stepIdx < sections.length - 1;
+      saveBtn.hidden = false;
+      if (is3dSection(sections[stepIdx])) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => schedulePm3dPreviewReload(modal));
+        });
+      }
     };
 
     wizardBar.addEventListener('click', (e) => {
@@ -3120,6 +4651,9 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
     } catch (err) { NEB.toast(err.message || 'Mockup upload mislukt', 'error'); }
     finally { if (btn) { btn.disabled = false; btn.textContent = '📷 Upload mockup'; } e.target.value = ''; }
   });
+
+  bindProduct3dModalUi(modal, { productIdx, draft });
+  bindProduct3dUploadGrid(modal, { isNew, productIdx, draft, persistFn });
 
   modal.addEventListener('click', async e => {
     const uploadBtn = e.target.closest('[data-modal-color-mockup]');
@@ -3215,6 +4749,13 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
     const name = (modal.querySelector('#pmName')?.value || '').trim();
     if (!name) { NEB.toast('Naam is verplicht', 'error'); return; }
 
+    const pmWarnings = window.AdminProduct3d?.collectPm3dWarnings?.(modal, isNew ? {} : draft.products[productIdx]) || [];
+    if (pmWarnings.length) {
+      NEB.toast(pmWarnings[0], 'error');
+      refreshPm3dStatus(modal);
+      return;
+    }
+
     const selectedColors = [];
     const colorPrices = {};
     modal.querySelectorAll('[data-modal-color]').forEach(row => {
@@ -3268,10 +4809,33 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
       description: (modal.querySelector('#pmDesc')?.value || '').trim(),
       enabled: !!modal.querySelector('#pmEnabled')?.checked,
       isDefault: !!modal.querySelector('#pmDefault')?.checked,
+      isFeatured: !!modal.querySelector('#pmFeatured')?.checked,
       basePrice: Number.isFinite(basePriceRaw) ? basePriceRaw : null,
       extraDesignFee: Number.isFinite(extraFeeRaw) ? extraFeeRaw : null,
       sortOrder: Number.isFinite(sortOrderRaw) ? Math.max(0, Math.min(9999, sortOrderRaw)) : 10,
       mockupPath: (modal.querySelector('#pmMockupPath')?.value || '').trim() || 'assets/tshirt_mockup.png',
+      model3d: {
+        enabled: !!modal.querySelector('#pmModel3dEnabled')?.checked,
+        format: modal.querySelector('#pmModel3dFormat')?.value || 'glb',
+        quality: modal.querySelector('#pmModel3dQuality')?.value || 'high',
+        modelPath: (modal.querySelector('#pmModel3dPath')?.value || '').trim().replace(/^\/+/, ''),
+        resourceDir: (() => {
+          const explicit = (modal.querySelector('#pmModel3dResourceDir')?.value || '').trim().replace(/^\/+/, '');
+          const modelPath = (modal.querySelector('#pmModel3dPath')?.value || '').trim().replace(/^\/+/, '');
+          if (explicit) return explicit;
+          if (modelPath.includes('/')) return modelPath.slice(0, modelPath.lastIndexOf('/') + 1);
+          return '';
+        })(),
+        materialPath: (modal.querySelector('#pmModel3dMaterial')?.value || '').trim().replace(/^\/+/, ''),
+        posterPath: (modal.querySelector('#pmModel3dPoster')?.value || '').trim().replace(/^\/+/, ''),
+        scale: Math.min(20, Math.max(0.01, Number(modal.querySelector('#pmModel3dScale')?.value || 1) || 1)),
+        rotationX: 0,
+        rotationY: Number(modal.querySelector('#pmModel3dRotY')?.value || 0) || 0,
+        rotationZ: 0,
+        autoRotate: !!modal.querySelector('#pmModel3dAutoRotate')?.checked,
+        rotateSpeed: Math.min(3, Math.max(0, Number(modal.querySelector('#pmModel3dRotateSpeed')?.value ?? 0.42) || 0)),
+        ...readPm3dPresentationFields(modal, isNew ? {} : (draft.products[productIdx]?.model3d || {}))
+      },
       colorHexes: selectedColors,
       colorPrices,
       sizePrices,
@@ -3283,6 +4847,9 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
 
     if (updated.isDefault) {
       (draft.products || []).forEach((pp, i) => { if (i !== productIdx) pp.isDefault = false; });
+    }
+    if (updated.isFeatured) {
+      (draft.products || []).forEach((pp, i) => { if (i !== productIdx) pp.isFeatured = false; });
     }
 
     if (isNew) {
@@ -3334,6 +4901,13 @@ async function loadStripeStatus() {
       </span>
       ${fromEnv ? '<span class="muted compact" style="margin-left:.6rem">Via omgevingsvariabele (kan niet worden bewerkt)</span>' : ''}
       ${data.appBaseUrl ? `<span class="muted compact" style="margin-left:.6rem">URL: ${escText(data.appBaseUrl)}</span>` : ''}`;
+    const foldMeta = document.getElementById('stripeFoldMeta');
+    if (foldMeta) {
+      const mode = document.getElementById('checkoutApprovalMode')?.value === 'DIRECT'
+        ? 'Direct betalen'
+        : 'Goedkeuring eerst';
+      foldMeta.textContent = `${mode} · ${connected ? 'Stripe OK' : 'Stripe niet geconfigureerd'}`;
+    }
     if (fromEnv) {
       const inputs = document.querySelectorAll('#stripeSecretKey,#stripeWebhookSecret,#stripeBaseUrl');
       inputs.forEach(el => { el.disabled = true; el.placeholder = 'Ingesteld via omgevingsvariabele'; });
@@ -3354,6 +4928,88 @@ async function loadSettings() {
   bindSettings(cfg);
   applySettingsSubTab(CURRENT_SETTINGS_STAB);
   loadStripeStatus();
+  refreshIntegrationChecklist(cfg);
+}
+
+function setIntegrationCheckItem(key, ok, detail) {
+  const row = document.querySelector(`.integration-check-item[data-check="${key}"]`);
+  if (!row) return;
+  row.classList.toggle('is-ok', !!ok);
+  row.classList.toggle('is-warn', !ok);
+  const detailEl = row.querySelector('.integration-check-detail');
+  if (detailEl) detailEl.textContent = detail || '';
+}
+
+async function refreshIntegrationChecklist(cfg = window.NEB_CONFIG) {
+  const smtp = cfg?.smtp || {};
+  const smtpOk = !!(smtp.host && (smtp.user || smtp.passSet));
+  setIntegrationCheckItem('smtp', smtpOk, smtpOk ? `${smtp.host}` : 'Host en gebruiker/wachtwoord invullen');
+
+  let stripeOk = false;
+  let stripeDetail = 'Niet geconfigureerd';
+  try {
+    const st = await NEB.get('/api/admin/config/stripe');
+    stripeOk = !!st?.configured;
+    stripeDetail = stripeOk ? (st.mode === 'live' ? 'Live key' : 'Test key') : 'Secret key ontbreekt';
+  } catch {
+    stripeDetail = 'Status onbekend';
+  }
+  setIntegrationCheckItem('stripe', stripeOk, stripeDetail);
+
+  let healthOk = false;
+  try {
+    const h = await fetch('/api/health').then((r) => r.json());
+    healthOk = !!h?.ok;
+    setIntegrationCheckItem('health', healthOk, healthOk ? 'API + database OK' : (h?.status || 'unhealthy'));
+  } catch {
+    setIntegrationCheckItem('health', false, 'Health check mislukt');
+  }
+
+  const products = normalizeProducts(cfg?.products || []);
+  const enabled3d = products.filter((p) => p.model3d?.enabled && p.model3d?.modelPath);
+  const withPoster = enabled3d.filter((p) => p.model3d?.posterPath);
+  const productsOk = !enabled3d.length || withPoster.length === enabled3d.length;
+  setIntegrationCheckItem(
+    'products3d',
+    productsOk,
+    enabled3d.length
+      ? `${withPoster.length}/${enabled3d.length} 3D-producten met poster`
+      : 'Geen 3D-producten'
+  );
+
+  try {
+    const cl = await NEB.get('/api/admin/ops/client-log-stats');
+    const stats = cl?.stats || {};
+    const blobOk = !stats.blobErrors24h;
+    setIntegrationCheckItem(
+      'clientlog',
+      blobOk,
+      stats.total24h
+        ? `${stats.blobErrors24h} blob/load-fouten (24u) · ${stats.total24h} logs`
+        : 'Geen client-logs (24u)'
+    );
+  } catch {
+    setIntegrationCheckItem('clientlog', false, 'Stats niet beschikbaar');
+  }
+  updateIntegrationChecklistFoldMeta();
+}
+
+function updateIntegrationChecklistFoldMeta() {
+  const el = document.getElementById('integrationChecklistFoldMeta');
+  if (!el) return;
+  const rows = document.querySelectorAll('.integration-check-item[data-check]');
+  if (!rows.length) {
+    el.textContent = 'Status laden…';
+    return;
+  }
+  let ok = 0;
+  let warn = 0;
+  rows.forEach((row) => {
+    if (row.classList.contains('is-ok')) ok += 1;
+    else if (row.classList.contains('is-warn')) warn += 1;
+  });
+  if (warn === 0) el.textContent = `${ok}/${rows.length} koppelingen OK`;
+  else el.textContent = `${warn} aandachtspunt${warn === 1 ? '' : 'en'} · ${ok} OK`;
 }
 
 function renderSettings(c) {
@@ -3367,6 +5023,8 @@ function renderSettings(c) {
   const packingDoc = documents.packingSlip || {};
   const templates = email.templates || {};
   const products = normalizeProducts(c.products);
+  const checkout = c.checkout || {};
+  const approvalMode = String(checkout.approvalMode || 'MANUAL').toUpperCase() === 'DIRECT' ? 'DIRECT' : 'MANUAL';
   const themeHeadingFont = String(theme.headingFont || 'POPPINS').toUpperCase();
   const themeBodyFont = String(theme.bodyFont || 'POPPINS').toUpperCase();
   const themeButtonStyle = String(theme.buttonStyle || 'ROUNDED').toUpperCase();
@@ -3419,7 +5077,7 @@ function renderSettings(c) {
             <div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.5rem">
               ${PLACEHOLDERS.map(p => `<button type="button" class="pill pill-neutral" style="cursor:pointer;font-size:.68rem;font-family:monospace" data-insert-placeholder="${escAttr(p)}" data-tmpl-key="${key}">${escText(p)}</button>`).join('')}
             </div>
-            <textarea id="tmplHtml_${key}" rows="10" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem">${escText(t.html || '')}</textarea>
+            <textarea id="tmplHtml_${key}" rows="8" class="tmpl-html-input">${escText(t.html || '')}</textarea>
           </div>
           <div class="mail-preview-grid" id="tmplPreview_${key}">
             <div class="mail-preview-col">
@@ -3461,395 +5119,550 @@ function renderSettings(c) {
     `;
   }).join('');
 
+  const heroFoldMeta = [
+    c.brand?.name,
+    c.hero?.title1,
+    c.hero?.title2
+  ].filter(Boolean).join(' · ') || 'Merknaam, hero-teksten en CTA';
+
+  const shipCost = Number(c.pricing?.shippingCost);
+  const shippingFoldMeta = [
+    Number.isFinite(shipCost)
+      ? `€${shipCost.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '',
+    c.pricing?.deliveryText,
+    c.pricing?.shippingFree ? 'gratis verzending' : ''
+  ].filter(Boolean).join(' · ') || 'Verzendkosten en levertijd';
+
+  const seoFoldMeta = c.seo?.ogTitle
+    || String(c.seo?.metaDescription || '').trim().slice(0, 72)
+    || 'Meta tags en Open Graph';
+
+  const companyFoldMeta = [
+    company.legalName,
+    company.city,
+    company.country
+  ].filter(Boolean).join(' · ') || 'Factuur- en supportgegevens';
+
+  const smtpConfigured = !!(smtp.host && (smtp.user || smtp.passSet));
+  const smtpFoldMeta = smtp.host
+    ? `${smtp.host}:${smtp.port || 587}${smtpConfigured ? '' : ' · invullen'}`
+    : 'Niet geconfigureerd';
+
+  const emailSenderFoldMeta = [
+    email.fromName || smtp.fromName,
+    email.fromAddress || smtp.fromAddress
+  ].filter(Boolean).join(' · ') || 'Template-afzender en reply-to';
+
+  const invoiceFoldMeta = [
+    invoiceDoc.title || 'Factuur',
+    Number.isFinite(Number(invoiceDoc.paymentTermsDays)) && Number(invoiceDoc.paymentTermsDays) > 0
+      ? `${invoiceDoc.paymentTermsDays}d betaaltermijn`
+      : (invoiceDoc.reminderEnabled !== false ? 'herinneringen aan' : null)
+  ].filter(Boolean).join(' · ') || 'PDF-factuurteksten';
+
+  const packingFoldMeta = [
+    packingDoc.title || 'Orderbon',
+    packingDoc.showFilePaths !== false ? 'paden zichtbaar' : 'paden verborgen'
+  ].filter(Boolean).join(' · ');
+
+  const themePresetLabel = THEME_PRESET_META[themePresetKey]?.label
+    || (themePresetKey === 'CUSTOM' ? 'Custom' : themePresetKey);
+  const themeFoldMeta = [
+    themePresetLabel,
+    themeMode === 'LIGHT' ? 'Licht' : 'Donker',
+    themeButtonStyle.toLowerCase()
+  ].filter(Boolean).join(' · ');
+
+  const heroVideoRaw = String(c.hero?.videoUrl || '').trim();
+  const heroVideoFoldMeta = heroVideoRaw
+    ? `Video: ${heroVideoRaw}`
+    : 'Uit — gradient-achtergrond';
+
+  const conversionFoldMeta = [
+    convVariant === 'STRONG' ? 'Strong CTA' : 'Soft CTA',
+    conversion.urgencyEnabled ? 'urgency aan' : null,
+    conversion.socialProofEnabled !== false ? 'social proof' : null
+  ].filter(Boolean).join(' · ') || 'CTA-teksten en checkout';
+
+  const reviewCount = (c.reviews || []).length;
+  const reviewsFoldMeta = reviewCount
+    ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}`
+    : 'Nog geen reviews';
+
+  const stripeFoldMeta = approvalMode === 'DIRECT'
+    ? 'Direct betalen · Stripe'
+    : 'Goedkeuring → betaallink · Stripe';
+
+  const emailTemplatesFoldMeta = `${EMAIL_TEMPLATES.length} templates · ${EMAIL_TEMPLATES[0]?.label || 'e-mail'}`;
+
   return `
     <div class="stab-panel active" data-stab="algemeen">
-    <div class="settings-section">
-      <h3>Merk & hero</h3>
-      <div class="form-stack">
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Merk &amp; hero</span>
+        <span class="settings-fold-meta">${escText(heroFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
         <div class="form-grid-2">
           <div class="field"><label>Merk naam</label><input id="brandName" value="${escAttr(c.brand?.name || '')}"></div>
           <div class="field"><label>Tagline</label><input id="brandTag" value="${escAttr(c.brand?.tagline || '')}"></div>
-        </div>
-        <div class="field"><label>Hero badge</label><input id="heroBadge" value="${escAttr(c.hero?.badge || '')}"></div>
-        <div class="form-grid-2">
+          <div class="field"><label>Hero badge</label><input id="heroBadge" value="${escAttr(c.hero?.badge || '')}"></div>
+          <div class="field"><label>CTA tekst</label><input id="heroCta" value="${escAttr(c.hero?.cta || '')}"></div>
           <div class="field"><label>Titel regel 1</label><input id="heroT1" value="${escAttr(c.hero?.title1 || '')}"></div>
           <div class="field"><label>Titel regel 2 (gekleurd)</label><input id="heroT2" value="${escAttr(c.hero?.title2 || '')}"></div>
         </div>
         <div class="field"><label>Subtitel</label><textarea id="heroSub" rows="2">${escText(c.hero?.subtitle || '')}</textarea></div>
-        <div class="field"><label>CTA tekst</label><input id="heroCta" value="${escAttr(c.hero?.cta || '')}"></div>
       </div>
-    </div>
+    </details>
 
-    <div class="settings-section">
-      <h3>Verzending &amp; levering</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">Basisprijs en design-opslag zijn per product instelbaar via de tab <strong>Producten &amp; Stijl → Maten &amp; Prijzen</strong>.</p>
-      <div class="form-grid-2">
-        <div class="field"><label>Verzendkost (€)</label><input type="number" step="0.01" min="0" id="shippingCost" value="${c.pricing?.shippingCost ?? 0}"></div>
-        <div class="field"><label>Gratis verzending vanaf (€)</label><input type="number" step="0.01" min="0" id="shippingFreeThreshold" value="${c.pricing?.shippingFreeThreshold ?? 0}"></div>
-        <div class="field"><label>Levertijd tekst</label><input id="deliveryText" value="${escAttr(c.pricing?.deliveryText || '')}"></div>
-        <div class="field"><label style="display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0;font-size:.92rem;color:var(--text);margin-top:1.6rem">
-          <input type="checkbox" id="shippingFree" ${c.pricing?.shippingFree ? 'checked' : ''}> Gratis verzending inschakelen
-        </label></div>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Verzending &amp; levering</span>
+        <span class="settings-fold-meta">${escText(shippingFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">Basisprijs en design-opslag zijn per product instelbaar via <strong>Producten &amp; Stijl → Maten &amp; Prijzen</strong>.</p>
+        <div class="form-grid-2">
+          <div class="field"><label>Verzendkost (€)</label><input type="number" step="0.01" min="0" id="shippingCost" value="${c.pricing?.shippingCost ?? 0}"></div>
+          <div class="field"><label>Gratis verzending vanaf (€)</label><input type="number" step="0.01" min="0" id="shippingFreeThreshold" value="${c.pricing?.shippingFreeThreshold ?? 0}"></div>
+          <div class="field"><label>Levertijd tekst</label><input id="deliveryText" value="${escAttr(c.pricing?.deliveryText || '')}"></div>
+          <div class="field field--check">
+            <label class="settings-check-label">
+              <input type="checkbox" id="shippingFree" ${c.pricing?.shippingFree ? 'checked' : ''}>
+              <span>Gratis verzending inschakelen</span>
+            </label>
+          </div>
+        </div>
       </div>
-    </div>
+    </details>
 
-    <div class="settings-section">
-      <h3>SEO &amp; social</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">Wordt gebruikt voor homepage meta tags, Open Graph en JSON-LD.</p>
-      <div class="form-stack">
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">SEO &amp; social</span>
+        <span class="settings-fold-meta">${escText(seoFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">Voor homepage meta tags, Open Graph en JSON-LD.</p>
+        <div class="form-grid-2">
+          <div class="field"><label>OG titel</label><input id="seoOgTitle" value="${escAttr(c.seo?.ogTitle || '')}"></div>
+          <div class="field"><label>OG image pad</label><input id="seoOgImagePath" value="${escAttr(c.seo?.ogImagePath || '')}" placeholder="assets/og-image.png"></div>
+        </div>
         <div class="field"><label>Meta description</label><textarea id="seoMetaDescription" rows="2">${escText(c.seo?.metaDescription || '')}</textarea></div>
-        <div class="field"><label>OG titel</label><input id="seoOgTitle" value="${escAttr(c.seo?.ogTitle || '')}"></div>
         <div class="field"><label>OG beschrijving</label><textarea id="seoOgDescription" rows="2">${escText(c.seo?.ogDescription || '')}</textarea></div>
-        <div class="field"><label>OG image pad</label><input id="seoOgImagePath" value="${escAttr(c.seo?.ogImagePath || '')}" placeholder="assets/og-image.png"></div>
       </div>
-    </div>
+    </details>
 
-    <div class="settings-section">
-      <h3>Bedrijfsgegevens</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">Gebruik deze gegevens in factuur-PDF en orderbon-PDF.</p>
-      <div class="form-grid-2">
-        <div class="field"><label>Bedrijfsnaam (juridisch)</label><input id="companyLegalName" value="${escAttr(company.legalName || '')}"></div>
-        <div class="field"><label>Factuur prefix</label><input id="companyInvoicePrefix" value="${escAttr(company.invoicePrefix || 'INV')}" placeholder="INV"></div>
-        <div class="field"><label>BTW nummer</label><input id="companyVatNumber" value="${escAttr(company.vatNumber || '')}" placeholder="BE0123.456.789"></div>
-        <div class="field"><label>Land</label><input id="companyCountry" value="${escAttr(company.country || 'BE')}"></div>
-        <div class="field"><label>Adres</label><input id="companyAddress" value="${escAttr(company.address || '')}"></div>
-        <div class="field"><label>Postcode</label><input id="companyPostcode" value="${escAttr(company.postcode || '')}"></div>
-        <div class="field"><label>Stad</label><input id="companyCity" value="${escAttr(company.city || '')}"></div>
-        <div class="field"><label>Support telefoon</label><input id="companySupportPhone" value="${escAttr(company.supportPhone || '')}"></div>
-        <div class="field" style="grid-column:1 / span 2"><label>Support e-mail</label><input id="companySupportEmail" value="${escAttr(company.supportEmail || '')}" placeholder="support@jouwdomein.be"></div>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Bedrijfsgegevens</span>
+        <span class="settings-fold-meta">${escText(companyFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">Voor factuur-PDF en orderbon-PDF.</p>
+        <div class="form-grid-2">
+          <div class="field"><label>Bedrijfsnaam (juridisch)</label><input id="companyLegalName" value="${escAttr(company.legalName || '')}"></div>
+          <div class="field"><label>Factuur prefix</label><input id="companyInvoicePrefix" value="${escAttr(company.invoicePrefix || 'INV')}" placeholder="INV"></div>
+          <div class="field"><label>BTW nummer</label><input id="companyVatNumber" value="${escAttr(company.vatNumber || '')}" placeholder="BE0123.456.789"></div>
+          <div class="field"><label>Land</label><input id="companyCountry" value="${escAttr(company.country || 'BE')}"></div>
+          <div class="field"><label>Adres</label><input id="companyAddress" value="${escAttr(company.address || '')}"></div>
+          <div class="field"><label>Postcode</label><input id="companyPostcode" value="${escAttr(company.postcode || '')}"></div>
+          <div class="field"><label>Stad</label><input id="companyCity" value="${escAttr(company.city || '')}"></div>
+          <div class="field"><label>Support telefoon</label><input id="companySupportPhone" value="${escAttr(company.supportPhone || '')}"></div>
+          <div class="field field--wide"><label>Support e-mail</label><input id="companySupportEmail" value="${escAttr(company.supportEmail || '')}" placeholder="support@jouwdomein.be"></div>
+        </div>
       </div>
-    </div>
+    </details>
     </div><!-- /stab algemeen -->
 
     <div class="stab-panel" data-stab="thema">
-    <div class="settings-section">
-      <h3>Branding &amp; thema</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">Kleuren, typografie en buttons worden op alle pagina's toegepast.</p>
-      <div class="theme-preset-grid">
-        ${presetCards}
-      </div>
-      <div class="form-grid-2">
-        <div class="field"><label>Logo symbool</label><input id="themeLogoMark" value="${escAttr(theme.logoMark || '✦')}" maxlength="2" placeholder="✦"></div>
-        <div class="field"><label>Website modus</label>
-          <select id="themeMode">
-            <option value="DARK" ${themeMode === 'DARK' ? 'selected' : ''}>Donker</option>
-            <option value="LIGHT" ${themeMode === 'LIGHT' ? 'selected' : ''}>Licht</option>
-          </select>
-          <div class="hint">Kies hier of de volledige website licht of donker rendert.</div>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Branding &amp; thema</span>
+        <span class="settings-fold-meta">${escText(themeFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">Kleuren, typografie en buttons op alle pagina's.</p>
+        <div class="theme-preset-grid theme-preset-grid--compact">
+          ${presetCards}
         </div>
-        <div class="field"><label>Thema preset</label>
-          <div style="display:flex;gap:.5rem">
-            <select id="themePreset" style="flex:1">
-              <option value="CUSTOM" ${String(theme.themePreset || 'CUSTOM').toUpperCase() === 'CUSTOM' ? 'selected' : ''}>Custom</option>
-              <option value="GREEN" ${String(theme.themePreset || '').toUpperCase() === 'GREEN' ? 'selected' : ''}>Green</option>
-              <option value="BLUE" ${String(theme.themePreset || '').toUpperCase() === 'BLUE' ? 'selected' : ''}>Blue</option>
-              <option value="NEUTRAL" ${String(theme.themePreset || '').toUpperCase() === 'NEUTRAL' ? 'selected' : ''}>Neutral</option>
+        <div class="form-grid-2">
+          <div class="field"><label>Logo symbool</label><input id="themeLogoMark" value="${escAttr(theme.logoMark || '✦')}" maxlength="2" placeholder="✦"></div>
+          <div class="field"><label>Website modus</label>
+            <select id="themeMode">
+              <option value="DARK" ${themeMode === 'DARK' ? 'selected' : ''}>Donker</option>
+              <option value="LIGHT" ${themeMode === 'LIGHT' ? 'selected' : ''}>Licht</option>
             </select>
-            <button class="btn btn-ghost btn-sm" id="applyThemePresetBtn" type="button">Toepassen</button>
+            <div class="hint settings-fold-hint">Licht of donker voor de hele site.</div>
+          </div>
+          <div class="field"><label>Thema preset</label>
+            <div class="settings-inline-actions">
+              <select id="themePreset">
+                <option value="CUSTOM" ${String(theme.themePreset || 'CUSTOM').toUpperCase() === 'CUSTOM' ? 'selected' : ''}>Custom</option>
+                <option value="GREEN" ${String(theme.themePreset || '').toUpperCase() === 'GREEN' ? 'selected' : ''}>Green</option>
+                <option value="BLUE" ${String(theme.themePreset || '').toUpperCase() === 'BLUE' ? 'selected' : ''}>Blue</option>
+                <option value="NEUTRAL" ${String(theme.themePreset || '').toUpperCase() === 'NEUTRAL' ? 'selected' : ''}>Neutral</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" id="applyThemePresetBtn" type="button">Toepassen</button>
+            </div>
+          </div>
+          <div class="field"><label>Button stijl</label>
+            <select id="themeButtonStyle">
+              <option value="ROUNDED" ${themeButtonStyle === 'ROUNDED' ? 'selected' : ''}>Rounded</option>
+              <option value="PILL" ${themeButtonStyle === 'PILL' ? 'selected' : ''}>Pill</option>
+              <option value="SHARP" ${themeButtonStyle === 'SHARP' ? 'selected' : ''}>Sharp</option>
+            </select>
+          </div>
+          <div class="field"><label>Accentkleur</label><input type="color" id="themeAccentColor" value="${escAttr(theme.accentColor || '#ffffff')}"></div>
+          <div class="field"><label>Accent gradient kleur 2</label><input type="color" id="themeAccentColor2" value="${escAttr(theme.accentColor2 || '#bdbdbd')}"></div>
+          <div class="field"><label>Heading font</label>
+            <select id="themeHeadingFont">
+              <option value="POPPINS" ${themeHeadingFont === 'POPPINS' ? 'selected' : ''}>Poppins (aanbevolen)</option>
+              <option value="SPACE_GROTESK" ${themeHeadingFont === 'SPACE_GROTESK' ? 'selected' : ''}>Space Grotesk</option>
+              <option value="INTER" ${themeHeadingFont === 'INTER' ? 'selected' : ''}>Inter</option>
+              <option value="SYSTEM" ${themeHeadingFont === 'SYSTEM' ? 'selected' : ''}>System</option>
+              <option value="SERIF" ${themeHeadingFont === 'SERIF' ? 'selected' : ''}>Serif</option>
+            </select>
+          </div>
+          <div class="field"><label>Body font</label>
+            <select id="themeBodyFont">
+              <option value="POPPINS" ${themeBodyFont === 'POPPINS' ? 'selected' : ''}>Poppins (aanbevolen)</option>
+              <option value="INTER" ${themeBodyFont === 'INTER' ? 'selected' : ''}>Inter</option>
+              <option value="SPACE_GROTESK" ${themeBodyFont === 'SPACE_GROTESK' ? 'selected' : ''}>Space Grotesk</option>
+              <option value="SYSTEM" ${themeBodyFont === 'SYSTEM' ? 'selected' : ''}>System</option>
+              <option value="SERIF" ${themeBodyFont === 'SERIF' ? 'selected' : ''}>Serif</option>
+            </select>
+          </div>
+          <div class="field"><label>Section achtergrond</label>
+            <select id="themeSectionTone">
+              <option value="MUTED" ${themeSectionTone === 'MUTED' ? 'selected' : ''}>Subtiel</option>
+              <option value="FLAT" ${themeSectionTone === 'FLAT' ? 'selected' : ''}>Vlak</option>
+              <option value="BOLD" ${themeSectionTone === 'BOLD' ? 'selected' : ''}>Sterker contrast</option>
+            </select>
+          </div>
+          <div class="field"><label>Logo asset pad</label><input id="themeLogoPath" value="${escAttr(theme.logoPath || '')}" placeholder="assets/branding/logo.png"></div>
+          <div class="field"><label>Favicon asset pad</label><input id="themeFaviconPath" value="${escAttr(theme.faviconPath || '')}" placeholder="assets/branding/favicon.png"></div>
+          <div class="field"><label>Factuur open badge (achtergrond)</label><input type="color" id="themeInvoiceOpenBg" value="${escAttr(themeInvoiceOpenBg)}"></div>
+          <div class="field"><label>Factuur open badge (tekst)</label><input type="color" id="themeInvoiceOpenText" value="${escAttr(themeInvoiceOpenText)}"></div>
+          <div class="field"><label>Vervalt badge (achtergrond)</label><input type="color" id="themeInvoiceDueBg" value="${escAttr(themeInvoiceDueBg)}"></div>
+          <div class="field"><label>Vervalt badge (tekst)</label><input type="color" id="themeInvoiceDueText" value="${escAttr(themeInvoiceDueText)}"></div>
+        </div>
+        <div class="settings-fold-actions">
+          <button class="btn btn-ghost btn-sm" id="uploadLogoBtn" type="button">Upload logo</button>
+          <button class="btn btn-ghost btn-sm" id="uploadFaviconBtn" type="button">Upload favicon</button>
+          <input type="file" id="uploadLogoFile" accept="image/*,.svg,.png,.jpg,.jpeg,.webp" hidden>
+          <input type="file" id="uploadFaviconFile" accept="image/*,.svg,.png,.ico" hidden>
+        </div>
+        <div class="brand-asset-previews brand-asset-previews--compact">
+          <div class="brand-asset-preview-card">
+            <span class="muted compact">Logo preview</span>
+            ${theme.logoPath ? `<img src="/${String(theme.logoPath).replace(/^\/+/, '')}" alt="Logo preview" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-asset-placeholder',textContent:'Geen logo geüpload'}));">` : '<div class="brand-asset-placeholder">Geen logo geüpload</div>'}
+          </div>
+          <div class="brand-asset-preview-card">
+            <span class="muted compact">Favicon preview</span>
+            ${theme.faviconPath ? `<img src="/${String(theme.faviconPath).replace(/^\/+/, '')}" alt="Favicon preview" class="favicon-preview" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-asset-placeholder',textContent:'Geen favicon geüpload'}));">` : '<div class="brand-asset-placeholder">Geen favicon geüpload</div>'}
           </div>
         </div>
-        <div class="field"><label>Button stijl</label>
-          <select id="themeButtonStyle">
-            <option value="ROUNDED" ${themeButtonStyle === 'ROUNDED' ? 'selected' : ''}>Rounded</option>
-            <option value="PILL" ${themeButtonStyle === 'PILL' ? 'selected' : ''}>Pill</option>
-            <option value="SHARP" ${themeButtonStyle === 'SHARP' ? 'selected' : ''}>Sharp</option>
-          </select>
-        </div>
-        <div class="field"><label>Accentkleur</label><input type="color" id="themeAccentColor" value="${escAttr(theme.accentColor || '#ffffff')}"></div>
-        <div class="field"><label>Accent gradient kleur 2</label><input type="color" id="themeAccentColor2" value="${escAttr(theme.accentColor2 || '#bdbdbd')}"></div>
-        <div class="field"><label>Heading font</label>
-          <select id="themeHeadingFont">
-            <option value="POPPINS" ${themeHeadingFont === 'POPPINS' ? 'selected' : ''}>Poppins (aanbevolen)</option>
-            <option value="SPACE_GROTESK" ${themeHeadingFont === 'SPACE_GROTESK' ? 'selected' : ''}>Space Grotesk</option>
-            <option value="INTER" ${themeHeadingFont === 'INTER' ? 'selected' : ''}>Inter</option>
-            <option value="SYSTEM" ${themeHeadingFont === 'SYSTEM' ? 'selected' : ''}>System</option>
-            <option value="SERIF" ${themeHeadingFont === 'SERIF' ? 'selected' : ''}>Serif</option>
-          </select>
-        </div>
-        <div class="field"><label>Body font</label>
-          <select id="themeBodyFont">
-            <option value="POPPINS" ${themeBodyFont === 'POPPINS' ? 'selected' : ''}>Poppins (aanbevolen)</option>
-            <option value="INTER" ${themeBodyFont === 'INTER' ? 'selected' : ''}>Inter</option>
-            <option value="SPACE_GROTESK" ${themeBodyFont === 'SPACE_GROTESK' ? 'selected' : ''}>Space Grotesk</option>
-            <option value="SYSTEM" ${themeBodyFont === 'SYSTEM' ? 'selected' : ''}>System</option>
-            <option value="SERIF" ${themeBodyFont === 'SERIF' ? 'selected' : ''}>Serif</option>
-          </select>
-        </div>
-        <div class="field"><label>Section achtergrond</label>
-          <select id="themeSectionTone">
-            <option value="MUTED" ${themeSectionTone === 'MUTED' ? 'selected' : ''}>Subtiel</option>
-            <option value="FLAT" ${themeSectionTone === 'FLAT' ? 'selected' : ''}>Vlak</option>
-            <option value="BOLD" ${themeSectionTone === 'BOLD' ? 'selected' : ''}>Sterker contrast</option>
-          </select>
-        </div>
       </div>
-      <div class="form-grid-2" style="margin-top:.85rem">
-        <div class="field">
-          <label>Logo asset pad</label>
-          <input id="themeLogoPath" value="${escAttr(theme.logoPath || '')}" placeholder="assets/branding/logo.png">
-        </div>
-        <div class="field">
-          <label>Favicon asset pad</label>
-          <input id="themeFaviconPath" value="${escAttr(theme.faviconPath || '')}" placeholder="assets/branding/favicon.png">
-        </div>
-      </div>
-      <div class="form-grid-2" style="margin-top:.85rem">
-        <div class="field">
-          <label>Factuur open badge (achtergrond)</label>
-          <input type="color" id="themeInvoiceOpenBg" value="${escAttr(themeInvoiceOpenBg)}">
-        </div>
-        <div class="field">
-          <label>Factuur open badge (tekst)</label>
-          <input type="color" id="themeInvoiceOpenText" value="${escAttr(themeInvoiceOpenText)}">
-        </div>
-        <div class="field">
-          <label>Vervalt badge (achtergrond)</label>
-          <input type="color" id="themeInvoiceDueBg" value="${escAttr(themeInvoiceDueBg)}">
-        </div>
-        <div class="field">
-          <label>Vervalt badge (tekst)</label>
-          <input type="color" id="themeInvoiceDueText" value="${escAttr(themeInvoiceDueText)}">
-        </div>
-      </div>
-      <div style="display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.7rem">
-        <button class="btn btn-ghost btn-sm" id="uploadLogoBtn" type="button">Upload logo</button>
-        <button class="btn btn-ghost btn-sm" id="uploadFaviconBtn" type="button">Upload favicon</button>
-        <input type="file" id="uploadLogoFile" accept="image/*,.svg,.png,.jpg,.jpeg,.webp" hidden>
-        <input type="file" id="uploadFaviconFile" accept="image/*,.svg,.png,.ico" hidden>
-      </div>
-      <div class="brand-asset-previews">
-        <div class="brand-asset-preview-card">
-          <span class="muted compact">Logo preview</span>
-          ${theme.logoPath ? `<img src="/${String(theme.logoPath).replace(/^\/+/, '')}" alt="Logo preview" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-asset-placeholder',textContent:'Geen logo geüpload'}));">` : '<div class="brand-asset-placeholder">Geen logo geüpload</div>'}
-        </div>
-        <div class="brand-asset-preview-card">
-          <span class="muted compact">Favicon preview</span>
-          ${theme.faviconPath ? `<img src="/${String(theme.faviconPath).replace(/^\/+/, '')}" alt="Favicon preview" class="favicon-preview" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-asset-placeholder',textContent:'Geen favicon geüpload'}));">` : '<div class="brand-asset-placeholder">Geen favicon geüpload</div>'}
-        </div>
-      </div>
-    </div>
+    </details>
 
-    <div class="settings-section">
-      <h3>Hero video (optioneel)</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">YouTube-link invullen om de hero-sectie van de homepage een geluidsloze achtergrondvideo te geven. Wordt automatisch privacy-enhanced (youtube-nocookie.com). Laat leeg voor de standaard gradient-achtergrond.</p>
-      <div class="field">
-        <label>YouTube URL</label>
-        <input id="heroVideoUrl" value="${escAttr(c.hero?.videoUrl || '')}" placeholder="https://www.youtube.com/watch?v=...">
-        <span class="hint">Alleen de video-ID wordt opgeslagen — bijv. <code>dQw4w9WgXcQ</code>.</span>
-      </div>
-      <div class="form-grid-2" style="margin-top:.65rem">
-        <div class="field">
-          <label>Overlay kleur</label>
-          <input type="color" id="heroVideoOverlayColor" value="${escAttr(c.hero?.videoOverlayColor || '#000000')}">
-        </div>
-        <div class="field">
-          <label>Overlay opacity (0 - 0.9)</label>
-          <input type="number" id="heroVideoOverlayOpacity" min="0" max="0.9" step="0.05" value="${escAttr(c.hero?.videoOverlayOpacity ?? 0.55)}">
-        </div>
-        <div class="field">
-          <label>Video blur (px)</label>
-          <input type="number" id="heroVideoBlurPx" min="0" max="8" step="1" value="${escAttr(c.hero?.videoBlurPx ?? 0)}">
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Hero video (optioneel)</span>
+        <span class="settings-fold-meta">${escText(heroVideoFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">YouTube-achtergrond op de homepage (youtube-nocookie). Laat leeg voor gradient.</p>
+        <div class="form-grid-2">
+          <div class="field field--wide">
+            <label>YouTube URL</label>
+            <input id="heroVideoUrl" value="${escAttr(c.hero?.videoUrl || '')}" placeholder="https://www.youtube.com/watch?v=...">
+            <span class="hint settings-fold-hint">Alleen video-ID wordt opgeslagen — bijv. <code>dQw4w9WgXcQ</code>.</span>
+          </div>
+          <div class="field"><label>Overlay kleur</label><input type="color" id="heroVideoOverlayColor" value="${escAttr(c.hero?.videoOverlayColor || '#000000')}"></div>
+          <div class="field"><label>Overlay opacity (0 - 0.9)</label><input type="number" id="heroVideoOverlayOpacity" min="0" max="0.9" step="0.05" value="${escAttr(c.hero?.videoOverlayOpacity ?? 0.55)}"></div>
+          <div class="field"><label>Video blur (px)</label><input type="number" id="heroVideoBlurPx" min="0" max="8" step="1" value="${escAttr(c.hero?.videoBlurPx ?? 0)}"></div>
         </div>
       </div>
-    </div>
+    </details>
     </div><!-- /stab thema -->
 
     <div class="stab-panel" data-stab="documenten">
-    <div class="settings-section">
-      <h3>Factuur template</h3>
-      <div class="form-grid-2">
-        <div class="field"><label>Titel</label><input id="docInvoiceTitle" value="${escAttr(invoiceDoc.title || 'Factuur')}"></div>
-        <div class="field"><label>Betaaltermijn (dagen)</label><input type="number" min="0" max="90" id="docInvoiceTermsDays" value="${escAttr(invoiceDoc.paymentTermsDays ?? 0)}"></div>
-        <div class="field"><label>Factuurnummer jaarmodus</label>
-          <select id="docInvoiceYearMode">
-            <option value="ORDER_YEAR" ${String(invoiceDoc.numberYearMode || 'ORDER_YEAR').toUpperCase() === 'ORDER_YEAR' ? 'selected' : ''}>Jaar van orderdatum</option>
-            <option value="ISSUE_YEAR" ${String(invoiceDoc.numberYearMode || 'ORDER_YEAR').toUpperCase() === 'ISSUE_YEAR' ? 'selected' : ''}>Jaar van factuurdatum</option>
-          </select>
-        </div>
-        <div class="field"><label>Nummer padding</label><input type="number" min="4" max="10" id="docInvoicePadLength" value="${escAttr(invoiceDoc.numberPadLength ?? 6)}"></div>
-      </div>
-      <div class="form-stack" style="margin-top:.75rem">
-        <div class="field"><label>Intro tekst</label><textarea id="docInvoiceIntro" rows="2">${escText(invoiceDoc.intro || '')}</textarea></div>
-        <div class="field"><label>Footer tekst</label><textarea id="docInvoiceFooter" rows="2">${escText(invoiceDoc.footer || '')}</textarea></div>
-        <div class="field"><label>Juridische disclaimer</label><textarea id="docInvoiceLegalDisclaimer" rows="3">${escText(invoiceDoc.legalDisclaimer || '')}</textarea></div>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Factuur template</span>
+        <span class="settings-fold-meta">${escText(invoiceFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
         <div class="form-grid-2">
-          <label style="display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0;font-size:.92rem;color:var(--text)">
-            <input type="checkbox" id="docInvoiceReminderEnabled" ${invoiceDoc.reminderEnabled !== false ? 'checked' : ''}> Herinneringsmails actief
-          </label>
+          <div class="field"><label>Titel</label><input id="docInvoiceTitle" value="${escAttr(invoiceDoc.title || 'Factuur')}"></div>
+          <div class="field"><label>Betaaltermijn (dagen)</label><input type="number" min="0" max="90" id="docInvoiceTermsDays" value="${escAttr(invoiceDoc.paymentTermsDays ?? 0)}"></div>
+          <div class="field"><label>Factuurnummer jaarmodus</label>
+            <select id="docInvoiceYearMode">
+              <option value="ORDER_YEAR" ${String(invoiceDoc.numberYearMode || 'ORDER_YEAR').toUpperCase() === 'ORDER_YEAR' ? 'selected' : ''}>Jaar van orderdatum</option>
+              <option value="ISSUE_YEAR" ${String(invoiceDoc.numberYearMode || 'ORDER_YEAR').toUpperCase() === 'ISSUE_YEAR' ? 'selected' : ''}>Jaar van factuurdatum</option>
+            </select>
+          </div>
+          <div class="field"><label>Nummer padding</label><input type="number" min="4" max="10" id="docInvoicePadLength" value="${escAttr(invoiceDoc.numberPadLength ?? 6)}"></div>
+          <div class="field field--wide"><label>Intro tekst</label><textarea id="docInvoiceIntro" rows="2">${escText(invoiceDoc.intro || '')}</textarea></div>
+          <div class="field field--wide"><label>Footer tekst</label><textarea id="docInvoiceFooter" rows="2">${escText(invoiceDoc.footer || '')}</textarea></div>
+          <div class="field field--wide"><label>Juridische disclaimer</label><textarea id="docInvoiceLegalDisclaimer" rows="2">${escText(invoiceDoc.legalDisclaimer || '')}</textarea></div>
+          <div class="field field--check">
+            <label class="settings-check-label">
+              <input type="checkbox" id="docInvoiceReminderEnabled" ${invoiceDoc.reminderEnabled !== false ? 'checked' : ''}>
+              <span>Herinneringsmails actief</span>
+            </label>
+          </div>
           <div class="field"><label>Interval (uren)</label><input type="number" min="1" max="240" id="docInvoiceReminderInterval" value="${escAttr(invoiceDoc.reminderIntervalHours ?? 24)}"></div>
           <div class="field"><label>Max reminders</label><input type="number" min="1" max="20" id="docInvoiceReminderMax" value="${escAttr(invoiceDoc.reminderMaxCount ?? 5)}"></div>
+          <div class="field field--check field--wide">
+            <label class="settings-check-label">
+              <input type="checkbox" id="docInvoiceShowSupport" ${invoiceDoc.showSupportContacts !== false ? 'checked' : ''}>
+              <span>Supportcontact tonen op factuur</span>
+            </label>
+          </div>
         </div>
-        <label style="display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0;font-size:.92rem;color:var(--text)">
-          <input type="checkbox" id="docInvoiceShowSupport" ${invoiceDoc.showSupportContacts !== false ? 'checked' : ''}> Supportcontact tonen op factuur
-        </label>
       </div>
-    </div>
-    <div class="settings-section">
-      <h3>Orderbon template</h3>
-      <div class="form-stack">
-        <div class="field"><label>Titel</label><input id="docPackingTitle" value="${escAttr(packingDoc.title || 'Orderbon')}"></div>
-        <div class="field"><label>Intro tekst</label><textarea id="docPackingIntro" rows="2">${escText(packingDoc.intro || '')}</textarea></div>
-        <div class="field"><label>Footer tekst</label><textarea id="docPackingFooter" rows="2">${escText(packingDoc.footer || '')}</textarea></div>
-        <label style="display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0;font-size:.92rem;color:var(--text)">
-          <input type="checkbox" id="docPackingShowPaths" ${packingDoc.showFilePaths !== false ? 'checked' : ''}> Bestandspaden tonen op orderbon
-        </label>
+    </details>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Orderbon template</span>
+        <span class="settings-fold-meta">${escText(packingFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <div class="form-grid-2">
+          <div class="field"><label>Titel</label><input id="docPackingTitle" value="${escAttr(packingDoc.title || 'Orderbon')}"></div>
+          <div class="field field--check">
+            <label class="settings-check-label">
+              <input type="checkbox" id="docPackingShowPaths" ${packingDoc.showFilePaths !== false ? 'checked' : ''}>
+              <span>Bestandspaden tonen op orderbon</span>
+            </label>
+          </div>
+          <div class="field field--wide"><label>Intro tekst</label><textarea id="docPackingIntro" rows="2">${escText(packingDoc.intro || '')}</textarea></div>
+          <div class="field field--wide"><label>Footer tekst</label><textarea id="docPackingFooter" rows="2">${escText(packingDoc.footer || '')}</textarea></div>
+        </div>
       </div>
-    </div>
+    </details>
     </div><!-- /stab documenten -->
 
     ${renderProductsTabPanel(products, c)}
 
     <div class="stab-panel" data-stab="email">
-    <div class="settings-section">
-      <h3>SMTP server</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">SMTP-instellingen worden gebruikt voor alle uitgaande e-mails. Omgevingsvariabelen (SMTP_HOST etc.) hebben voorrang.</p>
-      ${smtp.host ? '' : '<div class="theme-warning">SMTP is momenteel niet geconfigureerd. Testmails en ordermeldingen worden nu overgeslagen.</div>'}
-      <div class="form-grid-2">
-        <div class="field"><label>SMTP host</label><input id="smtpHost" value="${escAttr(smtp.host || '')}" placeholder="smtp.gmail.com"></div>
-        <div class="field"><label>SMTP poort</label><input type="number" id="smtpPort" value="${escAttr(smtp.port || 587)}" placeholder="587"></div>
-        <div class="field"><label>Gebruikersnaam</label><input id="smtpUser" value="${escAttr(smtp.user || '')}" placeholder="jouw@email.be" autocomplete="off"></div>
-        <div class="field"><label>Wachtwoord / app-wachtwoord</label><input type="password" id="smtpPass" value="" autocomplete="new-password" placeholder="${smtp.passSet ? 'Opgeslagen - leeg laten om te behouden' : '••••••••'}"><div class="hint">${smtp.passSet ? 'Er staat een wachtwoord opgeslagen. Vul alleen iets in om het te vervangen.' : 'Vul je SMTP/app-wachtwoord in om e-mail te kunnen testen.'}</div></div>
-        <div class="field"><label style="display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0;font-size:.92rem;color:var(--text);margin-top:1.4rem">
-          <input type="checkbox" id="smtpSecure" ${smtp.secure ? 'checked' : ''}> SSL/TLS (poort 465)
-        </label></div>
+    <details class="settings-section settings-fold" id="integrationChecklistSection">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Integratie-checklist</span>
+        <span class="settings-fold-meta" id="integrationChecklistFoldMeta">Status laden…</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body settings-fold-body--checklist">
+        <p class="muted compact settings-fold-hint">Kritieke koppelingen voor livegang. Vernieuw na het opslaan van instellingen.</p>
+        <div class="integration-checklist integration-checklist--compact" id="integrationChecklist">
+          <div class="integration-check-item" data-check="smtp"><span class="integration-check-dot"></span><span>SMTP</span><span class="integration-check-detail muted compact" id="checkSmtpDetail">—</span></div>
+          <div class="integration-check-item" data-check="stripe"><span class="integration-check-dot"></span><span>Stripe</span><span class="integration-check-detail muted compact" id="checkStripeDetail">—</span></div>
+          <div class="integration-check-item" data-check="health"><span class="integration-check-dot"></span><span>Health</span><span class="integration-check-detail muted compact" id="checkHealthDetail">—</span></div>
+          <div class="integration-check-item" data-check="products3d"><span class="integration-check-dot"></span><span>3D-catalogus</span><span class="integration-check-detail muted compact" id="checkProducts3dDetail">—</span></div>
+          <div class="integration-check-item" data-check="clientlog"><span class="integration-check-dot"></span><span>3D client-logs</span><span class="integration-check-detail muted compact" id="checkClientlogDetail">—</span></div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="refreshIntegrationChecklist">Checklist vernieuwen</button>
       </div>
-      <div class="form-grid-2" style="margin-top:.75rem">
-        <div class="field"><label>Afzender naam</label><input id="smtpFromName" value="${escAttr(smtp.fromName || email.fromName || '')}" placeholder="Mijn Winkel"></div>
-        <div class="field"><label>Afzender e-mailadres</label><input id="smtpFromAddress" value="${escAttr(smtp.fromAddress || email.fromAddress || '')}" placeholder="noreply@jouwdomein.be"></div>
+    </details>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">SMTP server</span>
+        <span class="settings-fold-meta">${escText(smtpFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">Voor alle uitgaande e-mails. Omgevingsvariabelen (SMTP_HOST etc.) hebben voorrang.</p>
+        ${smtp.host ? '' : '<div class="theme-warning settings-fold-warning">SMTP is momenteel niet geconfigureerd. Testmails en ordermeldingen worden nu overgeslagen.</div>'}
+        <div class="form-grid-2">
+          <div class="field"><label>SMTP host</label><input id="smtpHost" value="${escAttr(smtp.host || '')}" placeholder="smtp.gmail.com"></div>
+          <div class="field"><label>SMTP poort</label><input type="number" id="smtpPort" value="${escAttr(smtp.port || 587)}" placeholder="587"></div>
+          <div class="field"><label>Gebruikersnaam</label><input id="smtpUser" value="${escAttr(smtp.user || '')}" placeholder="jouw@email.be" autocomplete="off"></div>
+          <div class="field"><label>Wachtwoord / app-wachtwoord</label><input type="password" id="smtpPass" value="" autocomplete="new-password" placeholder="${smtp.passSet ? 'Opgeslagen - leeg laten om te behouden' : '••••••••'}"><div class="hint settings-fold-hint">${smtp.passSet ? 'Wachtwoord opgeslagen — leeg laten om te behouden.' : 'Vul in om e-mail te testen.'}</div></div>
+          <div class="field field--check">
+            <label class="settings-check-label">
+              <input type="checkbox" id="smtpSecure" ${smtp.secure ? 'checked' : ''}>
+              <span>SSL/TLS (poort 465)</span>
+            </label>
+          </div>
+          <div class="field"><label>Afzender naam</label><input id="smtpFromName" value="${escAttr(smtp.fromName || email.fromName || '')}" placeholder="Mijn Winkel"></div>
+          <div class="field"><label>Afzender e-mailadres</label><input id="smtpFromAddress" value="${escAttr(smtp.fromAddress || email.fromAddress || '')}" placeholder="noreply@jouwdomein.be"></div>
+        </div>
+        <div class="settings-fold-actions">
+          <button class="btn btn-ghost btn-sm" id="smtpTestBtn" type="button">Verstuur test-e-mail</button>
+          <input id="smtpTestTo" class="settings-fold-test-input" value="${escAttr(CURRENT_USER?.email || '')}" placeholder="naam@domein.be">
+          <span class="muted compact" id="smtpTestResult"></span>
+        </div>
       </div>
-      <div style="display:flex;gap:.5rem;margin-top:.75rem;align-items:center">
-        <button class="btn btn-ghost btn-sm" id="smtpTestBtn" type="button">Verstuur test-e-mail</button>
-        <input id="smtpTestTo" value="${escAttr(CURRENT_USER?.email || '')}" placeholder="naam@domein.be" style="flex:1;max-width:280px">
-        <span class="muted compact" id="smtpTestResult"></span>
+    </details>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">E-mail afzender &amp; reply-to</span>
+        <span class="settings-fold-meta">${escText(emailSenderFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">Afzender voor e-mailtemplates (los van SMTP-server).</p>
+        <div class="form-grid-2">
+          <div class="field"><label>Afzender naam (template)</label><input id="emailFromName" value="${escAttr(email.fromName || '')}"></div>
+          <div class="field"><label>Afzender e-mail (template)</label><input id="emailFromAddress" value="${escAttr(email.fromAddress || '')}"></div>
+          <div class="field"><label>Reply-to e-mail</label><input id="emailReplyTo" value="${escAttr(email.replyTo || '')}"></div>
+          <div class="field"><label>Testmail naar</label><input id="emailTestTo" value="${escAttr(CURRENT_USER?.email || '')}" placeholder="naam@domein.be"></div>
+        </div>
       </div>
-    </div>
-    <div class="settings-section">
-      <h3>E-mail afzender &amp; reply-to</h3>
-      <div class="form-grid-2">
-        <div class="field"><label>Afzender naam (template)</label><input id="emailFromName" value="${escAttr(email.fromName || '')}"></div>
-        <div class="field"><label>Afzender e-mail (template)</label><input id="emailFromAddress" value="${escAttr(email.fromAddress || '')}"></div>
-        <div class="field"><label>Reply-to e-mail</label><input id="emailReplyTo" value="${escAttr(email.replyTo || '')}"></div>
-        <div class="field"><label>Testmail naar</label><input id="emailTestTo" value="${escAttr(CURRENT_USER?.email || '')}" placeholder="naam@domein.be"></div>
-      </div>
-    </div>
+    </details>
     </div><!-- /stab email -->
 
     <div class="stab-panel" data-stab="email-templates">
-    <div class="settings-section">
-      <h3>E-mail templates</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">Placeholders: {{orderId}}, {{customerName}}, {{orderTotal}}, {{paymentUrl}}, {{paymentExpiresAt}}, {{invoiceNumber}}, {{invoiceDueDate}}, {{invoiceStatusLabel}}, {{dashboardUrl}}, {{loginUrl}}, {{companyName}}, {{orderStatusLabel}}, {{brandName}}, {{brandLogoUrl}}, {{brandFaviconUrl}}, {{brandAccentColor}}.</p>
-      ${templateRows}
-    </div>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">E-mail templates</span>
+        <span class="settings-fold-meta" id="emailTemplatesFoldMeta">${escText(emailTemplatesFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body settings-fold-body--templates">
+        <p class="muted compact settings-fold-hint">Placeholders o.a. <code>{{orderId}}</code>, <code>{{customerName}}</code>, <code>{{paymentUrl}}</code>, <code>{{brandName}}</code> — klik pills bij HTML om in te voegen.</p>
+        ${templateRows}
+      </div>
+    </details>
     </div><!-- /stab email-templates -->
 
     <div class="stab-panel" data-stab="conversie">
-    <div class="settings-section">
-      <h3>Conversie &amp; checkout copy</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">A/B-ready CTA-teksten, urgency en social-proof voor designer + winkelmand.</p>
-      <div class="form-grid-2">
-        <div class="field">
-          <label>CTA variant (standaard)</label>
-          <select id="convCtaVariant">
-            <option value="SOFT" ${convVariant === 'SOFT' ? 'selected' : ''}>Soft (laagdrempelig)</option>
-            <option value="STRONG" ${convVariant === 'STRONG' ? 'selected' : ''}>Strong (urgency)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Designer stap 2 CTA</label>
-          <input id="convDesignerStep2Cta" value="${escAttr(conversion.designerStep2Cta || 'Naar overzicht')}">
-        </div>
-        <div class="field">
-          <label>Designer stap 3 CTA (soft)</label>
-          <input id="convDesignerStep3Soft" value="${escAttr(conversion.designerStep3CtaSoft || 'Toevoegen naar winkelmand')}">
-        </div>
-        <div class="field">
-          <label>Designer stap 3 CTA (strong)</label>
-          <input id="convDesignerStep3Strong" value="${escAttr(conversion.designerStep3CtaStrong || 'Toevoegen naar winkelmand')}">
-        </div>
-        <div class="field">
-          <label>Winkelmand CTA (soft)</label>
-          <input id="convCartSoft" value="${escAttr(conversion.cartCtaSoft || 'Bestelling plaatsen (nog niet betalen)')}">
-        </div>
-        <div class="field">
-          <label>Winkelmand CTA (strong)</label>
-          <input id="convCartStrong" value="${escAttr(conversion.cartCtaStrong || 'Bestelling plaatsen')}">
-        </div>
-      </div>
-      <div class="form-grid-2" style="margin-top:.8rem">
-        <div class="field"><label style="display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0">
-          <input type="checkbox" id="convUrgencyEnabled" ${conversion.urgencyEnabled ? 'checked' : ''}> Urgency melding tonen
-        </label></div>
-        <div class="field"><label style="display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0">
-          <input type="checkbox" id="convSocialEnabled" ${conversion.socialProofEnabled !== false ? 'checked' : ''}> Social proof tonen
-        </label></div>
-        <div class="field">
-          <label>Urgency tekst</label>
-          <input id="convUrgencyText" value="${escAttr(conversion.urgencyText || 'Beperkte productiecapaciteit deze week.')}">
-        </div>
-        <div class="field">
-          <label>Social proof tekst</label>
-          <input id="convSocialText" value="${escAttr(conversion.socialProofText || 'Gemiddelde goedkeuring op werkdagen: binnen 2 uur.')}">
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Conversie &amp; checkout copy</span>
+        <span class="settings-fold-meta">${escText(conversionFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">CTA-teksten, urgency en social proof voor designer en winkelmand.</p>
+        <div class="form-grid-2">
+          <div class="field">
+            <label>CTA variant (standaard)</label>
+            <select id="convCtaVariant">
+              <option value="SOFT" ${convVariant === 'SOFT' ? 'selected' : ''}>Soft (laagdrempelig)</option>
+              <option value="STRONG" ${convVariant === 'STRONG' ? 'selected' : ''}>Strong (urgency)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Na toevoegen op homepage</label>
+            <select id="convStorefrontAfterAdd">
+              <option value="cart" ${String(conversion.storefrontAfterAdd || 'cart') !== 'stay' ? 'selected' : ''}>Ga naar winkelmand</option>
+              <option value="stay" ${String(conversion.storefrontAfterAdd || 'cart') === 'stay' ? 'selected' : ''}>Blijf op pagina + toast</option>
+            </select>
+          </div>
+          <div class="field"><label>Designer stap 2 CTA</label><input id="convDesignerStep2Cta" value="${escAttr(conversion.designerStep2Cta || 'Naar overzicht')}"></div>
+          <div class="field"><label>Designer stap 3 CTA (soft)</label><input id="convDesignerStep3Soft" value="${escAttr(conversion.designerStep3CtaSoft || 'Toevoegen naar winkelmand')}"></div>
+          <div class="field"><label>Designer stap 3 CTA (strong)</label><input id="convDesignerStep3Strong" value="${escAttr(conversion.designerStep3CtaStrong || 'Toevoegen naar winkelmand')}"></div>
+          <div class="field"><label>Winkelmand CTA (soft)</label><input id="convCartSoft" value="${escAttr(conversion.cartCtaSoft || 'Bestelling plaatsen (nog niet betalen)')}"></div>
+          <div class="field"><label>Winkelmand CTA (strong)</label><input id="convCartStrong" value="${escAttr(conversion.cartCtaStrong || 'Bestelling plaatsen')}"></div>
+          <div class="field field--check">
+            <label class="settings-check-label">
+              <input type="checkbox" id="convUrgencyEnabled" ${conversion.urgencyEnabled ? 'checked' : ''}>
+              <span>Urgency melding tonen</span>
+            </label>
+          </div>
+          <div class="field field--check">
+            <label class="settings-check-label">
+              <input type="checkbox" id="convSocialEnabled" ${conversion.socialProofEnabled !== false ? 'checked' : ''}>
+              <span>Social proof tonen</span>
+            </label>
+          </div>
+          <div class="field"><label>Urgency tekst</label><input id="convUrgencyText" value="${escAttr(conversion.urgencyText || 'Beperkte productiecapaciteit deze week.')}"></div>
+          <div class="field"><label>Social proof tekst</label><input id="convSocialText" value="${escAttr(conversion.socialProofText || 'Gemiddelde goedkeuring op werkdagen: binnen 2 uur.')}"></div>
+          <div class="field field--wide"><label>Checkout noot (onder CTA)</label><textarea id="convCheckoutNote" rows="2">${escText(conversion.checkoutNote || 'Na goedkeuring ontvang je je beveiligde betaallink per e-mail.')}</textarea></div>
+          <div class="field field--wide"><label>Annuleren &amp; restitutie (checkout)</label><textarea id="convCancelRefundNote" rows="2">${escText(conversion.cancelRefundNote || c.legal?.cancelRefundNote || '')}</textarea></div>
         </div>
       </div>
-      <div class="field" style="margin-top:.75rem">
-        <label>Checkout noot (onder CTA)</label>
-        <textarea id="convCheckoutNote" rows="2">${escText(conversion.checkoutNote || 'Na goedkeuring ontvang je je beveiligde betaallink per e-mail.')}</textarea>
+    </details>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Reviews</span>
+        <span class="settings-fold-meta">${escText(reviewsFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body settings-fold-body--reviews">
+        <div class="reviews-list" id="reviewRows">${reviewRows}</div>
+        <div class="row-add row-add--reviews">
+          <input id="newReviewInit" placeholder="Init.">
+          <input id="newReviewName" placeholder="Naam">
+          <input id="newReviewText" placeholder="Review tekst">
+          <button class="btn btn-ghost btn-sm" id="addReview">+ Review</button>
+        </div>
       </div>
-    </div>
-    <div class="settings-section">
-      <h3>Reviews</h3>
-      <div id="reviewRows">${reviewRows}</div>
-      <div class="row-add" style="grid-template-columns:80px 1fr 2fr auto">
-        <input id="newReviewInit" placeholder="Init.">
-        <input id="newReviewName" placeholder="Naam">
-        <input id="newReviewText" placeholder="Review tekst">
-        <button class="btn btn-ghost btn-sm" id="addReview">+ Review</button>
-      </div>
-    </div>
+    </details>
     </div><!-- /stab conversie -->
 
     <div class="stab-panel" data-stab="betalingen">
-    <div class="settings-section">
-      <h3>Stripe betalingen</h3>
-      <p class="muted compact" style="margin:-.5rem 0 1rem">Configureer Stripe voor beveiligde online betalingen. Sleutels worden versleuteld opgeslagen. Omgevingsvariabelen (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) hebben altijd voorrang.</p>
-      <div id="stripeStatusBar" style="margin-bottom:1rem"></div>
-      <div class="form-stack">
-        <div class="field">
-          <label>Secret Key</label>
-          <div style="display:flex;gap:.5rem">
-            <input type="password" id="stripeSecretKey" placeholder="sk_live_… of sk_test_…" autocomplete="off" style="flex:1;font-family:monospace">
-            <button type="button" class="btn btn-ghost btn-sm" id="stripeSecretToggle" style="flex-shrink:0">Toon</button>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Stripe betalingen</span>
+        <span class="settings-fold-meta" id="stripeFoldMeta">${escText(stripeFoldMeta)}</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body form-stack settings-form-compact">
+        <p class="muted compact settings-fold-hint">Sleutels versleuteld opgeslagen. Env-vars (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) hebben voorrang.</p>
+        <div class="form-grid-2">
+          <div class="field field--wide">
+            <label>Checkoutmodus</label>
+            <select id="checkoutApprovalMode">
+              <option value="MANUAL" ${approvalMode === 'MANUAL' ? 'selected' : ''}>Goedkeuring eerst, daarna betaallink</option>
+              <option value="DIRECT" ${approvalMode === 'DIRECT' ? 'selected' : ''}>Direct betalen na bestelling</option>
+            </select>
           </div>
-          <span class="hint">Gebruik sk_test_ voor tests, sk_live_ voor productie.</span>
-        </div>
-        <div class="field">
-          <label>Webhook Secret</label>
-          <div style="display:flex;gap:.5rem">
-            <input type="password" id="stripeWebhookSecret" placeholder="whsec_…" autocomplete="off" style="flex:1;font-family:monospace">
-            <button type="button" class="btn btn-ghost btn-sm" id="stripeWebhookToggle" style="flex-shrink:0">Toon</button>
+          <div class="field field--wide" id="stripeStatusBar"></div>
+          <div class="field field--wide">
+            <label>Secret Key</label>
+            <div class="settings-inline-actions settings-inline-actions--mono">
+              <input type="password" id="stripeSecretKey" placeholder="sk_live_… of sk_test_…" autocomplete="off">
+              <button type="button" class="btn btn-ghost btn-sm" id="stripeSecretToggle">Toon</button>
+            </div>
+            <span class="hint settings-fold-hint">sk_test_ voor tests, sk_live_ voor productie.</span>
           </div>
-          <span class="hint">Webhook URL voor je Stripe-dashboard: <code id="stripeWebhookUrl" style="font-size:.78rem"></code></span>
+          <div class="field field--wide">
+            <label>Webhook Secret</label>
+            <div class="settings-inline-actions settings-inline-actions--mono">
+              <input type="password" id="stripeWebhookSecret" placeholder="whsec_…" autocomplete="off">
+              <button type="button" class="btn btn-ghost btn-sm" id="stripeWebhookToggle">Toon</button>
+            </div>
+            <span class="hint settings-fold-hint">Webhook URL: <code id="stripeWebhookUrl"></code></span>
+          </div>
+          <div class="field field--wide">
+            <label>App basis-URL (betaallinks)</label>
+            <input id="stripeBaseUrl" placeholder="https://jouwdomein.be" autocomplete="off">
+          </div>
         </div>
-        <div class="field">
-          <label>App basis-URL <span class="muted compact">(voor betaallinks)</span></label>
-          <input id="stripeBaseUrl" placeholder="https://jouwdomein.be" autocomplete="off">
-        </div>
-        <div style="display:flex;gap:.65rem;flex-wrap:wrap;align-items:center;margin-top:.25rem">
+        <div class="settings-fold-actions">
           <button class="btn btn-primary btn-sm" id="stripesSaveBtn" type="button">Opslaan</button>
           <button class="btn btn-ghost btn-sm" id="stripesTestBtn" type="button">Verbinding testen</button>
           <span class="muted compact" id="stripeTestResult"></span>
         </div>
       </div>
-    </div>
-    <div class="settings-section">
-      <h3>Webhook instellen in Stripe</h3>
-      <p class="muted compact" style="margin:-.5rem 0 .75rem">Voeg in je <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener">Stripe-dashboard → Webhooks</a> een nieuw eindpunt toe met de bovenstaande URL. Selecteer minimaal deze events:</p>
-      <ul class="muted compact" style="margin:0 0 0 1.2rem;line-height:2">
-        <li><code>checkout.session.completed</code></li>
-        <li><code>checkout.session.expired</code></li>
-        <li><code>payment_intent.payment_failed</code></li>
-      </ul>
-    </div>
+    </details>
+    <details class="settings-section settings-fold">
+      <summary class="settings-fold-summary">
+        <span class="settings-fold-title">Webhook instellen in Stripe</span>
+        <span class="settings-fold-meta">3 events · dashboard</span>
+        <span class="settings-fold-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="settings-fold-body settings-fold-body--checklist">
+        <p class="muted compact settings-fold-hint">Nieuw eindpunt in <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener">Stripe → Webhooks</a> met de URL uit Stripe betalingen.</p>
+        <ul class="settings-stripe-events muted compact">
+          <li><code>checkout.session.completed</code></li>
+          <li><code>checkout.session.expired</code></li>
+          <li><code>payment_intent.payment_failed</code></li>
+        </ul>
+      </div>
+    </details>
     </div><!-- /stab betalingen -->
 
     <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
@@ -3880,10 +5693,22 @@ function bindSettings(cfg) {
 
   const persistDraftFromModal = async (successMsg = 'Instellingen opgeslagen') => {
     captureFlatFields();
-    const out = await NEB.put('/api/admin/config', draft);
-    applySavedConfig(out);
-    updateAllTemplateVersionUI();
-    NEB.toast(successMsg, 'success');
+    try {
+      const out = await NEB.put('/api/admin/config', draft);
+      applySavedConfig(out);
+      if (Array.isArray(out.warnings) && out.warnings.length) {
+        NEB.toast(`${out.warnings.length} productwaarschuwing(en) in catalogus`, 'error');
+      }
+      updateAllTemplateVersionUI();
+      NEB.toast(successMsg, 'success');
+    } catch (err) {
+      if (err?.data?.code === 'POSTER_REQUIRED') {
+        const names = (err.data.products || []).map((p) => p.productName || p.productId).join(', ');
+        NEB.toast(`Poster verplicht voor 3D in shop: ${names || 'zie producten'}`, 'error');
+        return;
+      }
+      throw err;
+    }
   };
   const applyThemePresetToDraft = (preset) => {
     const key = String(preset || '').toUpperCase();
@@ -3893,6 +5718,10 @@ function bindSettings(cfg) {
     const mode = draft.theme.themeMode || 'DARK';
     Object.assign(draft.theme, values, { themePreset: key, themeMode: mode });
     return true;
+  };
+  const previewBranding = () => {
+    captureFlatFields();
+    if (window.NEB?.applyBranding) NEB.applyBranding(draft);
   };
 
   const clickHandler = async (e) => {
@@ -3919,6 +5748,32 @@ function bindSettings(cfg) {
     // "+" Nieuw product button → open empty modal
     if (t.closest?.('#addProduct')) {
       openProductModal(-1, draft, draft, rerender, persistDraftFromModal);
+      return;
+    }
+    if (t.id === 'bulkEnsurePostersBtn') {
+      const resultEl = wrap.querySelector('#bulkEnsurePostersResult');
+      const btn = t;
+      const old = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Bezig…';
+      if (resultEl) resultEl.textContent = '';
+      NEB.post('/api/admin/products/bulk-ensure-posters', {})
+        .then((out) => {
+          const n = Array.isArray(out.updated) ? out.updated.length : 0;
+          if (resultEl) resultEl.textContent = n ? `${n} poster(s) aangemaakt` : 'Geen ontbrekende posters';
+          NEB.toast(n ? `${n} poster(s) gegenereerd van mockup` : 'Alle 3D-producten hebben al een poster', n ? 'success' : 'info');
+          return NEB.get('/api/admin/config');
+        })
+        .then((cfg) => {
+          applySavedConfig({ config: cfg });
+          refreshIntegrationChecklist(cfg);
+          rerender();
+        })
+        .catch((err) => NEB.toast(err.message || 'Bulk poster mislukt', 'error'))
+        .finally(() => {
+          btn.disabled = false;
+          btn.textContent = old;
+        });
       return;
     }
     if (t.id === 'uploadLogoBtn') {
@@ -3971,6 +5826,12 @@ function bindSettings(cfg) {
     if (editProdBtn?.dataset?.editProduct != null) {
       const idx = Number(editProdBtn.dataset.editProduct);
       openProductModal(idx, draft, draft, rerender, persistDraftFromModal);
+      return;
+    }
+    if (t.id === 'refreshIntegrationChecklist') {
+      captureFlatFields();
+      await refreshIntegrationChecklist(draft);
+      NEB.toast('Checklist bijgewerkt', 'success');
       return;
     }
     if (t.id === 'smtpTestBtn') {
@@ -4060,6 +5921,11 @@ function bindSettings(cfg) {
     if (tmplTab) {
       wrap.querySelectorAll('.tmpl-tab').forEach(b => b.classList.toggle('active', b.dataset.tmplTab === tmplTab));
       wrap.querySelectorAll('.tmpl-panel').forEach(p => p.classList.toggle('active', p.dataset.tmplPanel === tmplTab));
+      const tmplLabel = EMAIL_TEMPLATES.find((row) => row.key === tmplTab)?.label;
+      const tmplMeta = document.getElementById('emailTemplatesFoldMeta');
+      if (tmplMeta && tmplLabel) {
+        tmplMeta.textContent = `${EMAIL_TEMPLATES.length} templates · ${tmplLabel}`;
+      }
       return;
     }
     // Placeholder chip insertion
@@ -4157,6 +6023,9 @@ function bindSettings(cfg) {
     const reviewRow = e.target.closest('[data-review-row]');
     const productRow = e.target.closest('[data-product-row]');
     const id = e.target.id || '';
+    if (/^(theme|brandName|brandTag)/.test(id)) {
+      previewBranding();
+    }
     if (id === 'uploadLogoFile' || id === 'uploadFaviconFile') {
       const kind = id === 'uploadLogoFile' ? 'logo' : 'favicon';
       const file = e.target.files?.[0];
@@ -4236,6 +6105,7 @@ function bindSettings(cfg) {
     wrap.innerHTML = renderSettings(draft);
     bindSettings(draft);
     applySettingsSubTab(CURRENT_SETTINGS_STAB);
+    if (window.NEB?.applyBranding) NEB.applyBranding(draft);
   }
 
   function captureFlatFields() {
@@ -4314,6 +6184,11 @@ function bindSettings(cfg) {
     draft.documents.packingSlip.intro = wrap.querySelector('#docPackingIntro')?.value || draft.documents.packingSlip.intro || '';
     draft.documents.packingSlip.footer = wrap.querySelector('#docPackingFooter')?.value || draft.documents.packingSlip.footer || '';
     draft.documents.packingSlip.showFilePaths = !!wrap.querySelector('#docPackingShowPaths')?.checked;
+    draft.checkout = draft.checkout || {};
+    draft.checkout.approvalMode = wrap.querySelector('#checkoutApprovalMode')?.value === 'DIRECT' ? 'DIRECT' : 'MANUAL';
+    draft.checkout.paymentProvider = draft.checkout.paymentProvider || 'STRIPE';
+    draft.checkout.currency = draft.checkout.currency || 'EUR';
+    draft.checkout.paymentLinkExpiryHours = Math.max(1, Number(draft.checkout.paymentLinkExpiryHours || 24) || 24);
     draft.conversion = draft.conversion || {};
     draft.conversion.ctaVariant = wrap.querySelector('#convCtaVariant')?.value || draft.conversion.ctaVariant || 'SOFT';
     draft.conversion.designerStep2Cta = wrap.querySelector('#convDesignerStep2Cta')?.value || draft.conversion.designerStep2Cta || 'Naar overzicht';
@@ -4326,6 +6201,11 @@ function bindSettings(cfg) {
     draft.conversion.urgencyText = wrap.querySelector('#convUrgencyText')?.value || draft.conversion.urgencyText || 'Beperkte productiecapaciteit deze week.';
     draft.conversion.socialProofText = wrap.querySelector('#convSocialText')?.value || draft.conversion.socialProofText || 'Gemiddelde goedkeuring op werkdagen: binnen 2 uur.';
     draft.conversion.checkoutNote = wrap.querySelector('#convCheckoutNote')?.value || draft.conversion.checkoutNote || 'Na goedkeuring ontvang je je beveiligde betaallink per e-mail.';
+    const afterAdd = String(wrap.querySelector('#convStorefrontAfterAdd')?.value || 'cart').toLowerCase();
+    draft.conversion.storefrontAfterAdd = afterAdd === 'stay' ? 'stay' : 'cart';
+    draft.conversion.cancelRefundNote = wrap.querySelector('#convCancelRefundNote')?.value || draft.conversion.cancelRefundNote || '';
+    draft.legal = draft.legal || {};
+    draft.legal.cancelRefundNote = draft.conversion.cancelRefundNote;
     draft.products = normalizeProducts((draft.products || []).map((p, idx) => ({
       ...p,
       id: slugifyProductId(p.id || p.name || `product-${idx + 1}`, `product-${idx + 1}`),
@@ -4418,6 +6298,9 @@ function bindSettings(cfg) {
     try {
       const out = await NEB.put('/api/admin/config', draft);
       applySavedConfig(out);
+      if (Array.isArray(out.warnings) && out.warnings.length) {
+        NEB.toast(`${out.warnings.length} productwaarschuwing(en) — controleer 3D-posters`, 'error');
+      }
       updateAllTemplateVersionUI();
       NEB.toast('Instellingen opgeslagen', 'success');
     } catch (err) { NEB.toast(err.message, 'error'); }

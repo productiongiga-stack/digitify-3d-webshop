@@ -436,6 +436,10 @@ const NEB = (() => {
       if (!el) return;
       el.classList.add('bump');
       setTimeout(() => el.classList.remove('bump'), 350);
+    },
+
+    refreshCartBadge() {
+      return this.paintCart();
     }
   };
 })();

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "test": "node --test test/**/*.test.js",
     "seed:owner": "node scripts/seed-owner.js",
     "check:db-migration": "node scripts/check-db-migration.js"
   },
@@ -27,6 +28,7 @@
     "stripe": "^22.1.0"
   },
   "optionalDependencies": {
+    "@vercel/blob": "^0.27.3",
     "better-sqlite3": "^11.3.0"
   }
 }

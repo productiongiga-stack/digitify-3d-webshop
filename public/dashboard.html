@@ -265,6 +265,9 @@
                 <div class="kv"><span class="kv-key">Factuurdatum</span><span class="kv-val">${invoice?.issue_date ? NEB.fmtDate(invoice.issue_date) : '—'}</span></div>
                 <div class="kv"><span class="kv-key">Vervaldatum</span><span class="kv-val">${invoice?.due_date ? NEB.fmtDate(invoice.due_date) : '—'} ${invoice ? (NEB.invoiceDuePill(invoice) || '') : ''}</span></div>
                 <div class="kv"><span class="kv-key">Verstuurd</span><span class="kv-val">${invoice?.sent_at ? NEB.fmtDate(invoice.sent_at) : '—'}</span></div>
+                ${invoice && ['DEFINITIVE', 'PAID'].includes(String(invoice.status || '').toUpperCase())
+                  ? `<div class="kv"><span class="kv-key">PDF</span><span class="kv-val"><a class="btn btn-ghost btn-sm" href="/api/orders/${o.id}/invoice.pdf" target="_blank" rel="noopener">Factuur downloaden</a></span></div>`
+                  : ''}
               </div>
             </div>
 
@@ -279,7 +282,9 @@
             <div class="card" style="margin-bottom:.85rem;padding:1.25rem">
               <div class="detail-grid">
                 <div class="preview-tile">
-                  ${it.preview_path ? `<img src="/${it.preview_path}" alt="">` : `<div class="muted compact" style="padding:1rem">Geen preview</div>`}
+                  ${it.preview_path
+                    ? `<img src="/${String(it.preview_path).replace(/^\/+/, '')}" alt="${(it.product_label || 'Product').replace(/"/g, '&quot;')}" onerror="this.onerror=null;this.src='/assets/tshirt_mockup.png';">`
+                    : `<div class="muted compact" style="padding:1rem">Geen preview</div>`}
                 </div>
                 <div>
                   <div class="kv-list">

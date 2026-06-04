@@ -17,6 +17,16 @@ const archiver = require('archiver');
 const crypto = require('crypto');
 
 const { db, getConfig, setSetting, getSetting, ensureOwner, getOrCreateSecret, sortSizes, encryptSetting, decryptSetting, initDatabase, USE_PG, sanitizeProducts } = require('./db');
+const { collectProductsWarnings } = require('./lib/product-warnings');
+const { securityHeadersMiddleware } = require('./lib/security-headers');
+const { mirrorPublicAssetIfConfigured } = require('./lib/asset-storage');
+const { validateProductsPosterPolicy } = require('./lib/product-poster-policy');
+const { captureServerError } = require('./lib/observability');
+const { registerClientLogRoutes } = require('./routes/client-log');
+const { registerHealthRoutes } = require('./routes/health');
+const { registerProduct3dRoutes } = require('./routes/product-3d');
+const { registerPublicConfigRoutes } = require('./routes/public-config');
+const { registerAdminOrdersBulkRoutes } = require('./routes/admin-orders-bulk');
 const pgAdapter = USE_PG ? require('./db-pg') : null;
 const { version: APP_VERSION = '0.0.0' } = require('./package.json');
 // Only load better-sqlite3 when in SQLite mode (for backup/restore)
@@ -78,17 +88,11 @@ const productMockupUpload = multer({
     cb(new Error('Alleen afbeeldingsbestanden zijn toegestaan'));
   }
 });
-
 const app = express();
 app.set('trust proxy', 1);
 const APP_STARTED_AT = Date.now();
 app.disable('x-powered-by');
-app.use((_req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  next();
-});
+app.use(securityHeadersMiddleware);
 app.use(express.json({
   limit: '20mb',
   verify: (req, _res, buf) => { req.rawBody = buf; }
@@ -307,6 +311,15 @@ async function writeStoredUpload(relativePath, buffer, mime) {
   fs.writeFileSync(normalized.abs, buffer);
   await persistUploadBlob(normalized.rel, buffer, mime || mimeFromExt(path.extname(normalized.rel)));
   return normalized;
+}
+async function writePublicAsset(relativePath, buffer, mime) {
+  const target = await writeStoredUpload(relativePath, buffer, mime);
+  if (!target) return null;
+  const rel = String(relativePath || '').replace(/\\/g, '/');
+  if (rel.startsWith('assets/')) {
+    await mirrorPublicAssetIfConfigured(rel, buffer, mime);
+  }
+  return target;
 }
 async function readStoredUpload(relativePath) {
   const normalized = normalizeUploadPath(relativePath);
@@ -1120,20 +1133,33 @@ function absoluteUrlForAsset(rawPath, fallbackPath = '/assets/tshirt_mockup.png'
 
 function buildSeoPayload(config) {
   const brandName = String(config?.brand?.name || config?.company?.legalName || 'NEBULOUS').trim();
+  const products = Array.isArray(config?.products) ? config.products.filter(p => p && p.enabled !== false) : [];
+  const featuredProduct = products.find(p => p.isFeatured) || products.find(p => p.isDefault) || products[0] || null;
   const defaultDesc = String(config?.hero?.subtitle || config?.brand?.tagline || '').trim()
-    || 'Ontwerp je eigen custom kleding en promotiemateriaal met live preview. Upload je design en bestel direct online.';
+    || 'Bekijk producten in 3D, kies je variant en bestel online.';
   const seo = config?.seo || {};
-  const title = String(seo.ogTitle || `${brandName} - Custom kleding & printproducten`).trim();
-  const description = String(seo.metaDescription || seo.ogDescription || defaultDesc).trim();
-  const ogDescription = String(seo.ogDescription || description).trim();
-  const ogImage = absoluteUrlForAsset(seo.ogImagePath || 'assets/tshirt_mockup.png');
+  const productTitle = featuredProduct?.name ? `${featuredProduct.name} - ${brandName}` : `${brandName} - 3D product webshop`;
+  const staleSeoPattern = /(upload|design|ontwerp|custom kleding|printproducten)/i;
+  const seoTitle = String(seo.ogTitle || '').trim();
+  const seoMetaDescription = String(seo.metaDescription || '').trim();
+  const seoOgDescription = String(seo.ogDescription || '').trim();
+  const title = String((featuredProduct && staleSeoPattern.test(seoTitle)) ? productTitle : (seoTitle || productTitle)).trim();
+  const descriptionSource = (featuredProduct && staleSeoPattern.test(seoMetaDescription))
+    ? (featuredProduct.description || defaultDesc)
+    : (seoMetaDescription || seoOgDescription || featuredProduct?.description || defaultDesc);
+  const description = String(descriptionSource).trim();
+  const ogDescription = String((featuredProduct && staleSeoPattern.test(seoOgDescription)) ? description : (seoOgDescription || description)).trim();
+  const posterPath = featuredProduct?.model3d?.posterPath || featuredProduct?.mockupPath || 'assets/tshirt_mockup.png';
+  const ogImage = absoluteUrlForAsset(seo.ogImagePath || posterPath);
   const pageUrl = `${APP_BASE_URL}/`;
-  const lowPrice = Number(config?.pricing?.basePrice || 0);
+  const lowPrice = featuredProduct?.basePrice != null
+    ? Number(featuredProduct.basePrice)
+    : Number(config?.pricing?.basePrice || 0) * Math.max(0.1, Number(featuredProduct?.priceMultiplier || 1));
   const currency = String(config?.checkout?.currency || 'EUR').toUpperCase();
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
-    name: title,
+    name: featuredProduct?.name || title,
     description,
     brand: { '@type': 'Brand', name: brandName },
     image: [ogImage],
@@ -1205,7 +1231,8 @@ async function resolveCatalogProduct(rawProduct = {}, config = null) {
     extraDesignFeeMultiplier: Number.isFinite(extraFeeMultiplierRaw) ? Math.min(10, Math.max(0, extraFeeMultiplierRaw)) : 1,
     colorPrices: selected?.colorPrices || {},
     sizePrices: selected?.sizePrices || {},
-    colorData: selected?.colorData || {}
+    colorData: selected?.colorData || {},
+    model3d: selected?.model3d || null
   };
 }
 
@@ -1256,6 +1283,55 @@ async function computeItemPrice(rawItem = {}, config) {
   const extrasPrice = roundMoney(extraDesigns * extraFeePerDesign);
   const total = roundMoney((unitPrice + extrasPrice) * qty);
   return { unitPrice, extrasPrice, total, qty, product, size, colorHex, extraDesigns };
+}
+
+function sanitizePublicAssetPath(raw) {
+  const value = String(raw || '').trim().replace(/^\/+/, '').slice(0, 260);
+  if (!value || value.includes('..')) return '';
+  if (/^(https?:|data:|javascript:)/i.test(value)) return '';
+  return value;
+}
+
+function isCatalogAssetPath(raw) {
+  const rel = sanitizePublicAssetPath(raw);
+  return !!rel && rel.startsWith('assets/');
+}
+
+function catalogProductPreviewPath(product = {}) {
+  const m3d = product?.model3d && typeof product.model3d === 'object' ? product.model3d : {};
+  if (m3d.enabled !== false) {
+    const poster = sanitizePublicAssetPath(m3d.posterPath);
+    if (poster) return poster;
+  }
+  return sanitizePublicAssetPath(product.mockupPath) || '';
+}
+
+function resolveOrderItemPreviewPath(item = {}, config = null) {
+  const preview = sanitizePublicAssetPath(item.preview_path);
+  if (preview) return preview;
+  const mockup = sanitizePublicAssetPath(item.product_mockup_path);
+  if (mockup) return mockup;
+  const productId = String(item.product_type || '').trim().toLowerCase();
+  const products = Array.isArray(config?.products) ? config.products : [];
+  const product = products.find((p) => String(p?.id || '').toLowerCase() === productId);
+  return product ? catalogProductPreviewPath(product) : (mockup || '');
+}
+
+async function persistOrderItemPreviewPath(item, orderId, itemId, config = null) {
+  const src = sanitizePublicAssetPath(item.preview_path);
+  if (src && isCatalogAssetPath(src)) return src;
+  if (src) {
+    const ext = path.extname(src) || '.png';
+    const target = path.join('uploads', 'orders', String(orderId), String(itemId), `preview${ext}`);
+    const moved = await copyStoredUpload(src, target, { removeSource: true });
+    if (moved) return target;
+  }
+  const mockup = sanitizePublicAssetPath(item.product_mockup_path);
+  if (mockup) return mockup;
+  if (!config) config = await getConfig();
+  const productId = String(item.product_type || '').trim().toLowerCase();
+  const product = (config?.products || []).find((p) => String(p?.id || '').toLowerCase() === productId);
+  return product ? catalogProductPreviewPath(product) : '';
 }
 
 function htmlEscape(value) {
@@ -2391,14 +2467,6 @@ async function sendPaymentReceivedEmailWithInvoiceSafe(order) {
   });
 }
 
-// ── Public config ──────────────────────────────────────────────────────────
-app.get('/api/config', async (_req, res) => {
-  const cfg = await getConfig();
-  const safe = { ...cfg };
-  if (safe.smtp) safe.smtp = { ...safe.smtp, pass: undefined, user: undefined };
-  res.json(safe);
-});
-
 app.get('/api/track/open/:token.gif', async (req, res) => {
   const token = String(req.params.token || '').trim();
   if (/^[a-f0-9]{24,80}$/i.test(token)) {
@@ -2907,6 +2975,68 @@ app.get('/api/cart', requireAuth, async (req, res) => {
   res.json({ items: await loadCart(req.user.id) });
 });
 
+app.post('/api/cart/product', requireAuth, async (req, res) => {
+  try {
+    const cfg = await getConfig();
+    const catalog = Array.isArray(cfg.products) ? cfg.products.filter(p => p && p.enabled !== false) : [];
+    const requestedProductId = String(req.body?.productId || req.body?.productType || '').trim().toLowerCase();
+    const selected = catalog.find(p => String(p.id || '').toLowerCase() === requestedProductId)
+      || catalog.find(p => p.isFeatured)
+      || catalog.find(p => p.isDefault)
+      || catalog[0];
+    if (!selected) return res.status(400).json({ error: 'Geen actief product beschikbaar' });
+
+    const sizes = Array.isArray(selected.sizes) ? selected.sizes : [];
+    const requestedSize = String(req.body?.size || '').trim().toUpperCase();
+    const fallbackSize = String((typeof sizes[0] === 'string' ? sizes[0] : sizes[0]?.code) || 'M').toUpperCase();
+    const size = sizes.some((s) => String(typeof s === 'string' ? s : s?.code).toUpperCase() === requestedSize)
+      ? requestedSize
+      : fallbackSize;
+
+    const colors = Array.isArray(selected.colorHexes) && selected.colorHexes.length
+      ? selected.colorHexes
+      : (Array.isArray(cfg.colors) ? cfg.colors.filter(c => c && c.enabled !== false).map(c => c.hex) : []);
+    const requestedColor = normalizeHexColor(req.body?.colorHex || req.body?.color || '');
+    const colorHex = colors.map(normalizeHexColor).filter(Boolean).includes(requestedColor)
+      ? requestedColor
+      : (normalizeHexColor(colors[0]) || '');
+    const colorName = String(req.body?.colorName || (cfg.colors || []).find(c => normalizeHexColor(c.hex) === colorHex)?.name || '').trim();
+
+    const priced = await computeItemPrice({
+      productType: selected.id,
+      size,
+      colorHex,
+      qty: req.body?.qty,
+      extraDesigns: 0
+    }, cfg);
+    const catalogProduct = priced.product;
+    const result = await db.prepare(`
+      INSERT INTO cart_items(user_id, color_name, color_hex, size, qty, unit_price, extras_price, total, notes,
+                             product_type, product_label, product_mockup_path, product_price_multiplier, preview_path)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      req.user.id,
+      colorName,
+      colorHex,
+      priced.size || size,
+      priced.qty,
+      priced.unitPrice,
+      0,
+      priced.total,
+      String(req.body?.notes || '').trim().slice(0, 500),
+      catalogProduct.id,
+      catalogProduct.name,
+      catalogProduct.mockupPath,
+      catalogProduct.priceMultiplier,
+      catalogProductPreviewPath(catalogProduct) || null
+    );
+    const count = await db.prepare('SELECT COUNT(*) AS c FROM cart_items WHERE user_id = ?').get(req.user.id);
+    res.json({ ok: true, itemId: result.lastInsertRowid, count: count.c });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Product toevoegen mislukt' });
+  }
+});
+
 app.post('/api/cart', requireAuth, cartUpload.fields([
   { name: 'preview', maxCount: 1 },
   { name: 'designFiles', maxCount: 20 }
@@ -2952,6 +3082,11 @@ app.post('/api/cart', requireAuth, cartUpload.fields([
   }
 
   const hasLegacyDataUrls = designs.some(d => d?.dataUrl);
+  if (hasLegacyDataUrls) {
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Sunset', 'Sat, 01 Jan 2028 00:00:00 GMT');
+    console.warn('[cart] Legacy base64 design payload; migrate to multipart uploads.');
+  }
   if (!designFiles.length && !hasLegacyDataUrls) {
     return res.status(400).json({ error: 'Geen design geüpload' });
   }
@@ -3201,14 +3336,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       Number(item.product_price_multiplier) || 1);
     const itemId = r2.lastInsertRowid;
 
-    // Persist preview into an order-owned path so previews remain available after cart cleanup.
-    let newPreview = null;
-    if (item.preview_path) {
-      const ext = path.extname(item.preview_path) || '.png';
-      newPreview = path.join('uploads', 'orders', String(orderId), String(itemId), `preview${ext}`);
-      const movedPreview = await copyStoredUpload(item.preview_path, newPreview, { removeSource: true });
-      newPreview = movedPreview ? newPreview : null;
-    }
+    const newPreview = await persistOrderItemPreviewPath(item, orderId, itemId, cfgForShipping);
     if (newPreview) await db.prepare('UPDATE order_items SET preview_path = ? WHERE id = ?').run(newPreview, itemId);
 
     for (let i = 0; i < item.designs.length; i++) {
@@ -3229,7 +3357,8 @@ app.post('/api/orders', requireAuth, async (req, res) => {
   }
 
   await db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(req.user.id);
-  await ensureInvoiceForOrder(orderId, await getConfig());
+  const orderConfig = await getConfig();
+  await ensureInvoiceForOrder(orderId, orderConfig);
 
   if (saveAddress) {
     await db.prepare(`UPDATE users SET first_name=COALESCE(NULLIF(first_name,''),?),
@@ -3241,6 +3370,22 @@ app.post('/api/orders', requireAuth, async (req, res) => {
         (customer.phone || '').trim(), req.user.id);
   }
 
+  let checkoutUrl = null;
+  const approvalMode = String(orderConfig?.checkout?.approvalMode || 'MANUAL').toUpperCase();
+  if (approvalMode === 'DIRECT') {
+    try {
+      const orderForPayment = await db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+      const payment = await createCheckoutSessionForOrder(orderForPayment, orderConfig);
+      checkoutUrl = payment.checkoutUrl || null;
+      if (checkoutUrl) {
+        await db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('APPROVED_AWAITING_PAYMENT', orderId);
+        await addOrderHistory(orderId, 'APPROVED_AWAITING_PAYMENT', 'Directe checkout gestart', req.user.id);
+      }
+    } catch (err) {
+      console.warn('Direct checkout unavailable:', err.message || err);
+    }
+  }
+
   sendTemplatedEmailSafe('orderPlaced', customer.email.trim(), {
     orderId: formatOrderId(orderId),
     customerName: `${customer.firstName || ''} ${customer.lastName || ''}`.trim(),
@@ -3248,7 +3393,7 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     orderStatusLabel: statusLabel('NEW')
   });
 
-  res.json({ ok: true, orderId });
+  res.json({ ok: true, orderId, checkoutUrl });
 });
 
 // ── Orders (user + staff) ──────────────────────────────────────────────────
@@ -3282,6 +3427,37 @@ app.get('/api/orders/mine', requireAuth, async (req, res) => {
       };
     })
   });
+});
+
+app.get('/api/orders/:id/invoice.pdf', requireAuth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+    if (!order) return res.status(404).json({ error: 'Order niet gevonden' });
+    const isStaff = req.user.role === 'OWNER' || req.user.role === 'ADMIN';
+    if (!isStaff && (order.user_id !== req.user.id || isOrderArchived(order))) {
+      return res.status(403).json({ error: 'Geen toegang' });
+    }
+    if (isOrderArchived(order) && !isStaff) return res.status(404).json({ error: 'Order niet gevonden' });
+    await ensureInvoiceForOrder(id, await getConfig());
+    const invoice = await db.prepare(`SELECT id, invoice_number, status, paid_at FROM invoices WHERE order_id = ?`).get(id);
+    const status = String(invoice?.status || '').toUpperCase();
+    if (!invoice || !['DEFINITIVE', 'PAID'].includes(status)) {
+      return res.status(404).json({ error: 'Factuur nog niet beschikbaar' });
+    }
+    const data = await collectOrderDocumentData(id);
+    if (!data) return res.status(404).json({ error: 'Order niet gevonden' });
+    const cfg = await getConfig();
+    const pdf = await generateInvoicePdfBuffer(data, cfg);
+    const invoiceNo = data.invoice?.invoice_number || buildInvoiceNumber(data.order, cfg, new Date());
+    const name = safeFilename(`factuur-${invoiceNo}.pdf`);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${name}"`);
+    res.send(pdf);
+  } catch (err) {
+    console.error('Customer invoice pdf failed:', err);
+    res.status(500).json({ error: 'Factuur PDF niet beschikbaar' });
+  }
 });
 
 app.get('/api/orders/:id', requireAuth, async (req, res) => {
@@ -3325,10 +3501,15 @@ app.get('/api/orders/:id', requireAuth, async (req, res) => {
                   FROM shipping_events WHERE order_id = ? ORDER BY id DESC LIMIT 50`).all(id)
     : [];
   const activityFeed = isStaff ? buildOrderActivityFeed(order, history, emailTracking, depositInvoices, payments, shippingEvents) : [];
+  const cfg = await getConfig();
   res.json({
     order,
     invoice: invoicePayload,
-    items: items.map(i => ({ ...i, designs: byItem[i.id] || [] })),
+    items: items.map((i) => ({
+      ...i,
+      preview_path: resolveOrderItemPreviewPath(i, cfg),
+      designs: byItem[i.id] || []
+    })),
     history,
     payments,
     shippingEvents,
@@ -3768,7 +3949,7 @@ app.put('/api/admin/order-items/:id', requireAuth, requireRole('ADMIN', 'OWNER')
   res.json({ ok: true });
 });
 
-app.put('/api/admin/orders/bulk-status', requireAuth, requireRole('ADMIN', 'OWNER'), async (req, res) => {
+async function handleBulkOrderStatus(req, res) {
   const status = String(req.body?.status || '').toUpperCase();
   const note = (req.body?.note || '').trim();
   const inputIds = Array.isArray(req.body?.orderIds) ? req.body.orderIds : [];
@@ -3849,7 +4030,7 @@ app.put('/api/admin/orders/bulk-status', requireAuth, requireRole('ADMIN', 'OWNE
       missing
     }
   });
-});
+}
 
 async function handleBulkSoftDeleteOrders(req, res) {
   const inputIds = Array.isArray(req.body?.orderIds) ? req.body.orderIds : [];
@@ -3881,10 +4062,6 @@ async function handleBulkSoftDeleteOrders(req, res) {
 
   res.json({ ok: true, summary: { requested: ids.length, found: rows.length, updated, skipped, missing } });
 }
-
-app.post('/api/admin/orders/bulk-delete', requireAuth, requireRole('ADMIN', 'OWNER'), handleBulkSoftDeleteOrders);
-// Compat: support DELETE method on same route for older frontends.
-app.delete('/api/admin/orders/bulk-delete', requireAuth, requireRole('ADMIN', 'OWNER'), handleBulkSoftDeleteOrders);
 
 app.post('/api/admin/orders/:id/restore', requireAuth, requireRole('ADMIN', 'OWNER'), async (req, res) => {
   const id = Number(req.params.id);
@@ -4734,6 +4911,19 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER'), async (req, res)
   if (cfg.conversion != null && (typeof cfg.conversion !== 'object' || Array.isArray(cfg.conversion))) {
     return res.status(400).json({ error: 'conversion moet een object zijn' });
   }
+  if (cfg.checkout != null && (typeof cfg.checkout !== 'object' || Array.isArray(cfg.checkout))) {
+    return res.status(400).json({ error: 'checkout moet een object zijn' });
+  }
+  if (cfg.checkout) {
+    const base = { ...(before?.checkout || {}) };
+    const nextCheckout = { ...base, ...cfg.checkout };
+    const approvalMode = String(nextCheckout.approvalMode || 'MANUAL').toUpperCase();
+    nextCheckout.approvalMode = approvalMode === 'DIRECT' ? 'DIRECT' : 'MANUAL';
+    nextCheckout.paymentProvider = cleanText(nextCheckout.paymentProvider || 'STRIPE', 40).toUpperCase() || 'STRIPE';
+    nextCheckout.currency = cleanText(nextCheckout.currency || 'EUR', 8).toUpperCase() || 'EUR';
+    nextCheckout.paymentLinkExpiryHours = Math.min(720, Math.max(1, Number(nextCheckout.paymentLinkExpiryHours) || 24));
+    cfg.checkout = nextCheckout;
+  }
   if (cfg.conversion) {
     const base = { ...(before?.conversion || {}) };
     const nextConversion = { ...base, ...cfg.conversion };
@@ -4749,6 +4939,12 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER'), async (req, res)
     nextConversion.socialProofEnabled = !!nextConversion.socialProofEnabled;
     nextConversion.socialProofText = cleanText(nextConversion.socialProofText || 'Gemiddelde goedkeuring op werkdagen: binnen 2 uur.', 180);
     nextConversion.checkoutNote = cleanText(nextConversion.checkoutNote || 'Na goedkeuring ontvang je je beveiligde betaallink per e-mail.', 220);
+    const afterAddRaw = String(nextConversion.storefrontAfterAdd || 'cart').toLowerCase();
+    nextConversion.storefrontAfterAdd = afterAddRaw === 'stay' ? 'stay' : 'cart';
+    nextConversion.cancelRefundNote = cleanText(
+      nextConversion.cancelRefundNote || 'Je kan je bestelling annuleren zolang de status nog “Nieuw” is. Na goedkeuring of betaling gelden onze algemene voorwaarden voor restitutie.',
+      400
+    );
     cfg.conversion = nextConversion;
   }
   if (cfg.theme != null && (typeof cfg.theme !== 'object' || Array.isArray(cfg.theme))) {
@@ -4861,6 +5057,16 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER'), async (req, res)
     if (!nextSeo.ogImagePath) nextSeo.ogImagePath = 'assets/tshirt_mockup.png';
     cfg.seo = nextSeo;
   }
+  if (Array.isArray(cfg.products)) {
+    const posterGaps = validateProductsPosterPolicy(cfg.products);
+    if (posterGaps.length) {
+      return res.status(400).json({
+        error: '3D-producten in de shop vereisen een poster. Upload of genereer een poster per product.',
+        code: 'POSTER_REQUIRED',
+        products: posterGaps
+      });
+    }
+  }
   const next = { ...before, ...cfg };
   await setSetting('config', next);
   const saved = await getConfig();
@@ -4876,7 +5082,37 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER'), async (req, res)
       updatedTopLevelKeys: Object.keys(cfg || {})
     }
   });
-  res.json({ ok: true, config: toAdminConfigPayload(saved) });
+  const productWarnings = collectProductsWarnings(saved.products || []);
+  res.json({ ok: true, config: toAdminConfigPayload(saved), warnings: productWarnings });
+});
+
+registerClientLogRoutes(app, { requireAuth, requireRole });
+registerPublicConfigRoutes(app, { getConfig, resolveAppBaseUrl: getAppBaseUrl });
+registerProduct3dRoutes(app, {
+  requireAuth,
+  requireRole,
+  writePublicAsset,
+  readStoredUpload,
+  logAuditFromReq,
+  getConfig,
+  setSetting,
+  uploadDir: UPLOAD_DIR
+});
+registerHealthRoutes(app, {
+  db,
+  APP_VERSION,
+  APP_STARTED_AT,
+  processInvoiceRemindersSafe,
+  getConfig,
+  getStripeClient,
+  readStoredUpload,
+  uploadDir: UPLOAD_DIR
+});
+registerAdminOrdersBulkRoutes(app, {
+  requireAuth,
+  requireRole,
+  handleBulkOrderStatus,
+  handleBulkSoftDeleteOrders
 });
 
 app.post('/api/admin/branding/upload', requireAuth, requireRole('OWNER'), brandingUpload.single('asset'), async (req, res) => {
@@ -4904,7 +5140,7 @@ app.post('/api/admin/branding/upload', requireAuth, requireRole('OWNER'), brandi
     }
 
     const optimized = await pipeline.png({ compressionLevel: 9, quality: 90 }).toBuffer();
-    await writeStoredUpload(relPath, optimized, 'image/png');
+    await writePublicAsset(relPath, optimized, 'image/png');
 
     await logAuditFromReq(req, {
       action: 'CONFIG_UPDATED',
@@ -4942,7 +5178,7 @@ app.post('/api/admin/products/mockup', requireAuth, requireRole('OWNER', 'ADMIN'
       })
       .png({ compressionLevel: 9, quality: 90 })
       .toBuffer();
-    await writeStoredUpload(relPath, optimized, 'image/png');
+    await writePublicAsset(relPath, optimized, 'image/png');
 
     await logAuditFromReq(req, {
       action: 'CONFIG_UPDATED',
@@ -5394,43 +5630,6 @@ app.get('/api/debug/session', (req, res) => {
 });
 
 // ── Static & uploads ──────────────────────────────────────────────────────
-app.get('/api/health', async (_req, res) => {
-  const now = new Date();
-  try {
-    const dbRow = await db.prepare('SELECT 1 AS ok').get();
-    const dbOk = !!dbRow?.ok;
-    if (!dbOk) throw new Error('DB check failed');
-    const reminderJob = await processInvoiceRemindersSafe(false);
-    res.json({
-      ok: true,
-      status: 'healthy',
-      service: 'nebulous-api',
-      version: APP_VERSION,
-      now: now.toISOString(),
-      uptimeSec: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
-      checks: {
-        database: 'ok'
-      },
-      jobs: {
-        invoiceReminders: reminderJob?.ok ? `sent:${reminderJob.sent || 0}` : (reminderJob?.skipped || 'idle')
-      }
-    });
-  } catch (err) {
-    res.status(503).json({
-      ok: false,
-      status: 'unhealthy',
-      service: 'nebulous-api',
-      version: APP_VERSION,
-      now: now.toISOString(),
-      uptimeSec: Math.floor((Date.now() - APP_STARTED_AT) / 1000),
-      checks: {
-        database: 'error'
-      },
-      error: err.message || 'Health check failed'
-    });
-  }
-});
-
 app.get('/uploads-signed', async (req, res) => {
   const p = req.query?.p;
   const exp = Number(req.query?.exp || 0);
@@ -5514,7 +5713,7 @@ pageRoutes.forEach(route => {
   });
 });
 
-app.use((err, _req, res, next) => {
+app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Bestand te groot (max 15MB per bestand)' });
     return res.status(400).json({ error: `Upload fout: ${err.message}` });
@@ -5523,6 +5722,16 @@ app.use((err, _req, res, next) => {
     return res.status(400).json({ error: err.message });
   }
   return next(err);
+});
+
+app.use((err, req, res, _next) => {
+  captureServerError(err, {
+    tags: { path: req?.path || '' },
+    extra: { method: req?.method }
+  });
+  if (!res.headersSent) {
+    res.status(500).json({ error: err?.message || 'Interne serverfout' });
+  }
 });
 
 // ── Async startup + Vercel export ─────────────────────────────────────────────

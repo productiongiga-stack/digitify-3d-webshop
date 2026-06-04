@@ -85,7 +85,7 @@ Vanaf Sprint 1 stap 7 zijn ook **Factuur PDF** en **Orderbon PDF** beschikbaar p
 - `product` (JSON string)
 - `designs` (JSON string metadata: positie, schaal, offsets, notities)
 
-Legacy base64 payloads blijven tijdelijk ondersteund voor backward compatibility.
+Legacy base64 payloads in `/api/cart` zijn **deprecated** (sunset 2028-01-01); gebruik multipart uploads. Responses bevatten een `Deprecation` header zolang base64 nog werkt.
 
 ## Image optimalisatie (Sprint 2 stap 2)
 
@@ -545,6 +545,17 @@ Factuuropvolging in admin is verder versneld:
 | **Kleuren** (naam + hex + actief/inactief) | ja |
 | **Maten** + meerprijs per maat (auto-gesorteerd) | ja |
 | **Reviews** | ja |
+
+## 3D-catalogus checklist (admin)
+
+1. Upload **GLB** (textures ingebakken) via product → 3D-presentatie.
+2. Stel weergave in: **Hero-preview** + schaal “Grootte (hero)” (alleen grote hero in shop).
+3. Maak **poster** (upload of “Poster uit 3D-view”) — verplicht voor 3D in de shop.
+4. Sla product op; controleer storefront (`/?product=id`) en integratie-checklist (Instellingen → E-mail).
+5. Productie: zet `BLOB_READ_WRITE_TOKEN` of `ASSET_CDN_BASE` — zie [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+6. **Beeldkwaliteit** (per product): belichting (Studio/Zacht/Contrast), omgeving IBL, contactschaduw, helderheid, reflectie.
+
+Bulk: **Vul ontbrekende 3D-posters** (mockup → WebP) in Productcatalogus.
 
 ## Owner-tools
 

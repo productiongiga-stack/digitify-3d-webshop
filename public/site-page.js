@@ -12,7 +12,7 @@
             <div>
               <h5>Shop</h5>
               <a href="/shop">Shop</a>
-              <a href="/designer">Designer</a>
+              <a href="/">Producten</a>
               <a href="/prijzen">Prijzen</a>
               <a href="/maattabel">Maattabel</a>
             </div>
@@ -85,8 +85,9 @@
         <article class="shop-card">
           <img src="${img}" alt="${escapeHtml(String(p.name || 'Product'))}">
           <h3>${escapeHtml(String(p.name || 'Product'))}</h3>
-          <p>${escapeHtml(String(p.description || 'Premium printkwaliteit met live preview.'))}</p>
+          <p>${escapeHtml(String(p.description || 'Product met 3D preview.'))}</p>
           <div class="price">Vanaf ${price}</div>
+          <p style="margin-top:.75rem"><a class="btn btn-ghost btn-sm" href="/" style="text-decoration:none">Bekijk in 3D</a></p>
         </article>`;
     }).join('');
   }

@@ -10,6 +10,8 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const { inferModelFormat } = require('./lib/model3d-format');
+const { sanitizePresentationFields } = require('./lib/model3d-presentation');
 
 const USE_PG = !!process.env.DATABASE_URL;
 const IS_VERCEL = !!process.env.VERCEL;
@@ -590,7 +592,12 @@ const DEFAULT_CONFIG = {
     cartCtaStrong: 'Bestelling plaatsen',
     urgencyEnabled: false, urgencyText: 'Beperkte productiecapaciteit deze week.',
     socialProofEnabled: true, socialProofText: 'Gemiddelde goedkeuring op werkdagen: binnen 2 uur.',
-    checkoutNote: 'Na goedkeuring ontvang je je beveiligde betaallink per e-mail.'
+    checkoutNote: 'Na goedkeuring ontvang je je beveiligde betaallink per e-mail.',
+    storefrontAfterAdd: 'cart',
+    cancelRefundNote: 'Je kan je bestelling annuleren zolang de status nog “Nieuw” is. Na goedkeuring of betaling gelden onze algemene voorwaarden voor restitutie.'
+  },
+  legal: {
+    cancelRefundNote: 'Je kan je bestelling annuleren zolang de status nog “Nieuw” is. Na goedkeuring of betaling gelden onze algemene voorwaarden voor restitutie.'
   },
   company: {
     legalName: 'NEBULOUS', invoicePrefix: 'INV', vatNumber: '', address: '',
@@ -661,12 +668,12 @@ const DEFAULT_CONFIG = {
     ogImagePath: 'assets/tshirt_mockup.png'
   },
   theme: {
-    themePreset: 'CUSTOM',
+    themePreset: 'GREEN',
     themeMode: 'DARK',
     logoMark: '✦', logoPath: '', faviconPath: '',
-    accentColor: '#ffffff', accentColor2: '#bdbdbd',
-    headingFont: 'POPPINS', bodyFont: 'POPPINS',
-    buttonStyle: 'ROUNDED', sectionTone: 'MUTED',
+    accentColor: '#14b8a6', accentColor2: '#a3e635',
+    headingFont: 'SPACE_GROTESK', bodyFont: 'INTER',
+    buttonStyle: 'PILL', sectionTone: 'BOLD',
     invoiceOpenBg: '#1d4ed8', invoiceOpenText: '#eff6ff',
     invoiceDueBg: '#f59e0b', invoiceDueText: '#111827'
   },
@@ -689,9 +696,23 @@ const DEFAULT_CONFIG = {
   ],
   products: [
     {
-      id: 'tshirt', name: 'T-shirt', description: 'Premium unisex T-shirt',
+      id: 'phone-case', name: '3D telefooncase', description: 'Interactief voorbeeldproduct met 3D preview',
       mockupPath: 'assets/tshirt_mockup.png', basePrice: 34.95, extraDesignFee: 7.50,
       priceMultiplier: 1, extraDesignFeeMultiplier: 1, colorPrices: {},
+      model3d: {
+        enabled: true,
+        format: 'obj',
+        modelPath: 'assets/products/3d/iphone/iphone.obj',
+        materialPath: 'assets/products/3d/iphone/iphone.mtl',
+        posterPath: 'assets/tshirt_mockup.png',
+        scale: 1,
+        rotationX: 0,
+        rotationY: -8,
+        rotationZ: 0,
+        autoRotate: true,
+        rotateSpeed: 0.42
+      },
+      isFeatured: true,
       sizePrices: { XS: 0, S: 0, M: 0, L: 0, XL: 1.5, XXL: 2.5 }, colorData: {},
       sortOrder: 10,
       sizes: [
@@ -827,6 +848,47 @@ function sanitizeProducts(products) {
     }
     return out.slice(0, 20);
   };
+  const sanitizeAssetPath = (raw, max = 260) => {
+    const value = String(raw || '').trim().replace(/^\/+/, '').slice(0, max);
+    if (!value || value.includes('..') || /^(https?:|data:|javascript:)/i.test(value)) return '';
+    return value;
+  };
+  const sanitizeModel3d = (raw) => {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const modelPath = sanitizeAssetPath(src.modelPath || src.path || '');
+    let materialPath = sanitizeAssetPath(src.materialPath || '');
+    const posterPath = sanitizeAssetPath(src.posterPath || src.poster || '');
+    const scaleRaw = Number(src.scale);
+    const rotationXRaw = Number(src.rotationX);
+    const rotationYRaw = Number(src.rotationY);
+    const rotationZRaw = Number(src.rotationZ);
+    const rotateSpeedRaw = Number(src.rotateSpeed);
+    const format = inferModelFormat({ format: src.format, modelPath });
+    if (format !== 'obj') materialPath = '';
+    const qualityRaw = String(src.quality || '').trim().toLowerCase();
+    const quality = qualityRaw === 'standard' ? 'standard' : 'high';
+    let resourceDir = sanitizeAssetPath(src.resourceDir || '');
+    if (!resourceDir && modelPath.includes('/')) {
+      resourceDir = sanitizeAssetPath(modelPath.slice(0, modelPath.lastIndexOf('/') + 1));
+    }
+    const presentation = sanitizePresentationFields(src, quality);
+    return {
+      enabled: !!modelPath && src.enabled !== false,
+      format,
+      modelPath,
+      materialPath,
+      posterPath,
+      resourceDir,
+      quality,
+      scale: Number.isFinite(scaleRaw) ? Math.min(20, Math.max(0.01, scaleRaw)) : 1,
+      rotationX: Number.isFinite(rotationXRaw) ? Math.max(-360, Math.min(360, rotationXRaw)) : 0,
+      rotationY: Number.isFinite(rotationYRaw) ? Math.max(-360, Math.min(360, rotationYRaw)) : 0,
+      rotationZ: Number.isFinite(rotationZRaw) ? Math.max(-360, Math.min(360, rotationZRaw)) : 0,
+      autoRotate: src.autoRotate === true,
+      rotateSpeed: Number.isFinite(rotateSpeedRaw) ? Math.min(3, Math.max(0, rotateSpeedRaw)) : 0.42,
+      ...presentation
+    };
+  };
 
   const src = Array.isArray(products) ? products : [];
   const out = [], seen = new Set();
@@ -882,9 +944,10 @@ function sanitizeProducts(products) {
     out.push({
       id: idBase, name, description, mockupPath: mockupPath || 'assets/tshirt_mockup.png',
       basePrice, extraDesignFee, priceMultiplier, extraDesignFeeMultiplier,
+      model3d: sanitizeModel3d(p?.model3d),
       colorPrices, sizePrices, colorData,
       sortOrder: Number.isFinite(Number(p?.sortOrder)) ? Math.max(0, Math.min(9999, Math.round(Number(p.sortOrder)))) : ((idx + 1) * 10),
-      sizes, colorHexes, enabled: p?.enabled !== false, isDefault: !!p?.isDefault
+      sizes, colorHexes, enabled: p?.enabled !== false, isDefault: !!p?.isDefault, isFeatured: !!p?.isFeatured
     });
   });
   const enabled = out.filter(p => p.enabled);
@@ -892,6 +955,9 @@ function sanitizeProducts(products) {
   let defaultIdx = out.findIndex(p => p.enabled && p.isDefault);
   if (defaultIdx < 0) defaultIdx = out.findIndex(p => p.enabled);
   out.forEach((p, idx) => { p.isDefault = idx === defaultIdx; });
+  let featuredIdx = out.findIndex(p => p.enabled && p.isFeatured);
+  if (featuredIdx < 0) featuredIdx = defaultIdx;
+  out.forEach((p, idx) => { p.isFeatured = idx === featuredIdx; });
   return out.sort((a, b) => {
     const aO = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 9999;
     const bO = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 9999;
