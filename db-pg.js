@@ -21,7 +21,10 @@ let pool;
 
 function getPool() {
   if (pool) return pool;
-  const connStr = String(process.env.DATABASE_URL || '').trim();
+  let connStr = String(process.env.DATABASE_URL || '').trim();
+  connStr = connStr.replace(/[\r\n\u0000]+/g, '');
+  // Vercel/Supabase imports sometimes store a literal "\\n" suffix on the db name.
+  connStr = connStr.replace(/\/postgres\\n(?=\?|$)/i, '/postgres');
   if (!connStr) throw new Error('DATABASE_URL environment variable is required for PostgreSQL mode');
 
   const max = Math.max(1, Math.min(8, Number(process.env.PG_POOL_MAX) || 2));
