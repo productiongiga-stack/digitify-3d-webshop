@@ -568,24 +568,49 @@ function sortSizes(sizes) {
 }
 
 // ── DEFAULT_CONFIG ────────────────────────────────────────────────────────────
+const DIGITIFY_MODEL3D = (folder, opts = {}) => ({
+  enabled: true,
+  format: 'glb',
+  modelPath: `assets/products/digitify/${folder}/model.glb`,
+  materialPath: '',
+  posterPath: `assets/products/digitify/${folder}/poster.png`,
+  resourceDir: `assets/products/digitify/${folder}/`,
+  quality: 'high',
+  scale: 1,
+  rotationX: 0,
+  rotationY: -8,
+  rotationZ: 0,
+  autoRotate: true,
+  rotateSpeed: 0.42,
+  lightingPreset: 'warm',
+  envPreset: 'warm',
+  shadows: true,
+  exposure: 1,
+  ...opts
+});
+
 const DEFAULT_CONFIG = {
-  brand: { name: 'NEBULOUS', tagline: 'Professioneel marketingmateriaal, gemaakt voor jou.' },
+  site: {
+    wordpressUrl: 'https://digitify.be',
+    shopUrl: 'https://shop.digitify.be'
+  },
+  brand: { name: 'Digitify', tagline: 'Partner in Digital Solutions' },
   hero: {
-    badge: 'Upload · Preview · Bestel',
-    title1: 'Ontwerp jouw',
-    title2: 'marketingmateriaal',
-    subtitle: 'Upload je design, pas aan en bestel direct. Van t-shirts tot beachflags en spandoeken — binnen 3 werkdagen geleverd.',
-    cta: 'Start met ontwerpen',
+    badge: 'NFC · LED · Smart signage',
+    title1: 'Digitify',
+    title2: 'Webshop',
+    subtitle: 'Ontdek NFC-tags, LED lichtbakken en smart marketingproducten. Bekijk items in 3D en bestel direct online.',
+    cta: 'Bekijk producten',
     videoUrl: '',
-    videoOverlayColor: '#000000',
-    videoOverlayOpacity: 0.55,
+    videoOverlayColor: '#fff9f2',
+    videoOverlayOpacity: 0.35,
     videoBlurPx: 0
   },
   smtp: { host: '', port: 587, user: '', pass: '', secure: false, fromName: '', fromAddress: '' },
   pricing: {
-    basePrice: 34.95, extraDesignFee: 7.50,
-    sizeUpcharge: { XS: 0, S: 0, M: 0, L: 0, XL: 1.5, XXL: 2.5 },
-    shippingCost: 4.95, shippingFree: true, shippingFreeThreshold: 0, deliveryText: '3 werkdagen'
+    basePrice: 19.95, extraDesignFee: 0,
+    sizeUpcharge: { STD: 0 },
+    shippingCost: 4.95, shippingFree: true, shippingFreeThreshold: 75, deliveryText: '3-5 werkdagen'
   },
   checkout: { approvalMode: 'MANUAL', paymentProvider: 'STRIPE', paymentLinkExpiryHours: 24, currency: 'EUR' },
   conversion: {
@@ -605,8 +630,9 @@ const DEFAULT_CONFIG = {
     cancelRefundNote: 'Je kan je bestelling annuleren zolang de status nog “Nieuw” is. Na goedkeuring of betaling gelden onze algemene voorwaarden voor restitutie.'
   },
   company: {
-    legalName: 'NEBULOUS', invoicePrefix: 'INV', vatNumber: '', address: '',
-    postcode: '', city: '', country: 'BE', supportEmail: '', supportPhone: ''
+    legalName: 'Digitify', invoicePrefix: 'INV', vatNumber: 'BE0685.556.507',
+    address: 'Boekweitstraat 7', postcode: '9000', city: 'Gent', country: 'BE',
+    supportEmail: 'contact@digitify.be', supportPhone: '+32 486 51 57 73'
   },
   documents: {
     invoice: {
@@ -626,7 +652,7 @@ const DEFAULT_CONFIG = {
     }
   },
   email: {
-    fromName: 'NEBULOUS', fromAddress: '', replyTo: '',
+    fromName: 'Digitify', fromAddress: 'contact@digitify.be', replyTo: 'contact@digitify.be',
     templates: {
       orderPlaced: {
         subject: 'We hebben je bestelling ontvangen (#{{orderId}})',
@@ -667,20 +693,22 @@ const DEFAULT_CONFIG = {
     }
   },
   seo: {
-    metaDescription: 'Ontwerp je eigen custom kleding en promotiemateriaal met live preview. Upload je design en bestel direct online.',
-    ogTitle: 'NEBULOUS - Custom kleding & printproducten',
-    ogDescription: 'Ontwerp je eigen custom kleding en promotiemateriaal met live preview. Upload je design en bestel direct online.',
-    ogImagePath: 'assets/tshirt_mockup.png'
+    metaDescription: 'Digitify webshop — NFC-tags, LED lichtbakken en smart marketingproducten met 3D preview. Bestel direct online.',
+    ogTitle: 'Digitify Webshop — NFC & LED producten',
+    ogDescription: 'Bekijk NFC-tags, LED lichtbakken en meer in 3D. Bestel direct via shop.digitify.be.',
+    ogImagePath: 'assets/products/digitify/led-lichtbak-kabel/poster.png'
   },
   theme: {
-    themePreset: 'GREEN',
-    themeMode: 'DARK',
-    logoMark: '✦', logoPath: '', faviconPath: '',
-    accentColor: '#14b8a6', accentColor2: '#a3e635',
-    headingFont: 'SPACE_GROTESK', bodyFont: 'INTER',
-    buttonStyle: 'PILL', sectionTone: 'BOLD',
-    invoiceOpenBg: '#1d4ed8', invoiceOpenText: '#eff6ff',
-    invoiceDueBg: '#f59e0b', invoiceDueText: '#111827'
+    themePreset: 'DIGITIFY',
+    themeMode: 'LIGHT',
+    logoMark: '✦',
+    logoPath: 'assets/branding/logo-black.png',
+    faviconPath: 'assets/branding/logo-black.png',
+    accentColor: '#ffaf51', accentColor2: '#e8983a',
+    headingFont: 'POPPINS', bodyFont: 'POPPINS',
+    buttonStyle: 'ROUNDED', sectionTone: 'MUTED',
+    invoiceOpenBg: '#ffaf51', invoiceOpenText: '#0a0a0a',
+    invoiceDueBg: '#e8983a', invoiceDueText: '#0a0a0a'
   },
   colors: [
     { name: 'Zwart', hex: '#0b0b0b', enabled: true },
@@ -694,77 +722,73 @@ const DEFAULT_CONFIG = {
     { initials: 'JB', name: 'Jesse B.', text: 'Al 10x gewassen, print ziet er nog steeds als nieuw uit. Besteld als cadeau, groot succes!' }
   ],
   features: [
-    { title: 'Premium producten', text: 'Textiel, banners, beachflags en meer — voor elk marketing doel' },
-    { title: 'Professionele afdruk', text: 'DTG voor textiel, UV-print voor banners en beachflags' },
-    { title: 'Gratis verzending', text: 'Bezorgd binnen 3 werkdagen in heel Nederland' },
-    { title: '30 dagen retour', text: 'Niet tevreden? Stuur gratis terug, geen vragen' }
+    { title: 'NFC & smart tags', text: 'Polsbandjes, kaartjes, sleutelhangers en tafelborden voor reviews en contact' },
+    { title: 'LED lichtbakken', text: 'Opvallende displays voor A3/A4 — met kabel of oplaadbaar' },
+    { title: '3D preview', text: 'Bekijk geselecteerde producten interactief in 3D vóór je bestelt' },
+    { title: 'Veilig betalen', text: 'Bestel online via beveiligde Stripe checkout' }
   ],
   products: [
     {
-      id: 'phone-case', name: '3D telefooncase', description: 'Interactief voorbeeldproduct met 3D preview',
-      mockupPath: 'assets/tshirt_mockup.png', basePrice: 34.95, extraDesignFee: 7.50,
-      priceMultiplier: 1, extraDesignFeeMultiplier: 1, colorPrices: {},
-      model3d: {
-        enabled: true,
-        format: 'obj',
-        modelPath: 'assets/products/3d/iphone/iphone.obj',
-        materialPath: 'assets/products/3d/iphone/iphone.mtl',
-        posterPath: 'assets/tshirt_mockup.png',
-        scale: 1,
-        rotationX: 0,
-        rotationY: -8,
-        rotationZ: 0,
-        autoRotate: true,
-        rotateSpeed: 0.42
+      id: 'led-lichtbak-kabel', category: '3d', name: 'LED lichtbak A3/A4 (kabel)',
+      description: 'Opvallende LED lichtbak met kabelaansluiting — ideaal voor vitrines en counters.',
+      mockupPath: 'assets/products/digitify/led-lichtbak-kabel/mock.png', basePrice: 49.95,
+      model3d: DIGITIFY_MODEL3D('led-lichtbak-kabel'),
+      isFeatured: true, isDefault: true, sortOrder: 10,
+      sizes: [{ code: 'A4', widthMm: 297, heightMm: 210 }],
+      colorHexes: ['#ffffff'], enabled: true
+    },
+    {
+      id: 'led-lichtbak-oplaadbaar', category: '3d', name: 'LED lichtbak A4 (oplaadbaar)',
+      description: 'Draadloze LED lichtbak met oplaadbare batterij — flexibel te plaatsen.',
+      mockupPath: 'assets/products/digitify/led-lichtbak-oplaadbaar/mock.png', basePrice: 54.95,
+      model3d: DIGITIFY_MODEL3D('led-lichtbak-oplaadbaar'),
+      sortOrder: 20, sizes: [{ code: 'A4', widthMm: 297, heightMm: 210 }],
+      colorHexes: ['#ffffff'], enabled: true
+    },
+    {
+      id: 'nfc-polsbandjes', category: '3d', name: 'NFC polsbandjes',
+      description: 'Wearable NFC-tags voor events, festivals en activaties — meerdere kleuren beschikbaar.',
+      mockupPath: 'assets/products/digitify/nfc-polsbandjes/mock.png', basePrice: 19.95,
+      model3d: DIGITIFY_MODEL3D('nfc-polsbandjes'),
+      sortOrder: 30, sizes: [{ code: 'STD', widthMm: 250, heightMm: 25 }],
+      colorHexes: ['#ffffff', '#0b0b0b', '#ffaf51'], enabled: true
+    },
+    {
+      id: 'nfc-patroon-bord', category: '3d', name: 'NFC patroon bord',
+      description: 'Tafelbord met NFC — wit of zwart, eigen design of Digitify-opmaak.',
+      mockupPath: 'assets/products/digitify/nfc-patroon-bord/mock.png', basePrice: 34.95,
+      model3d: DIGITIFY_MODEL3D('nfc-patroon-bord'),
+      sortOrder: 40, sizes: [{ code: 'STD', widthMm: 148, heightMm: 210 }],
+      colorHexes: ['#ffffff', '#0b0b0b'], enabled: true
+    },
+    {
+      id: 'nfc-sleutelhangers', category: '3d', name: 'NFC sleutelhangers',
+      description: 'Compacte RFID/NFC tokens als sleutelhanger — perfect voor loyalty en activaties.',
+      mockupPath: 'assets/products/digitify/nfc-sleutelhangers/mock.png', basePrice: 9.95,
+      model3d: DIGITIFY_MODEL3D('nfc-sleutelhangers'),
+      sortOrder: 50, sizes: [{ code: 'STD', widthMm: 40, heightMm: 40 }],
+      colorHexes: ['#ffffff', '#0b0b0b'], enabled: true
+    },
+    {
+      id: 'nfc-review-kaartjes', category: 'standard', name: 'NFC review kaartjes',
+      description: 'Kaartjes die klanten direct naar je Google review-pagina leiden.',
+      mockupPath: 'assets/products/digitify/nfc-review-kaartjes/mock.png', basePrice: 12.95,
+      model3d: { enabled: false },
+      sortOrder: 60, sizes: [{ code: 'STD', widthMm: 85, heightMm: 55 }],
+      colorHexes: ['#ffffff'], enabled: true
+    },
+    {
+      id: 'nfc-visitekaartjes', category: 'standard', name: 'NFC visitekaartjes',
+      description: 'Smart business cards — deel je contactgegevens met één tik.',
+      mockupPath: 'assets/products/digitify/nfc-visitekaartjes/mock-wit.png', basePrice: 24.95,
+      model3d: { enabled: false },
+      sortOrder: 70, sizes: [{ code: 'STD', widthMm: 85, heightMm: 55 }],
+      colorHexes: ['#ffffff', '#0b0b0b'],
+      colorData: {
+        '#ffffff': { mockupPath: 'assets/products/digitify/nfc-visitekaartjes/mock-wit.png' },
+        '#0b0b0b': { mockupPath: 'assets/products/digitify/nfc-visitekaartjes/mock-zwart.png' }
       },
-      isFeatured: true,
-      sizePrices: { XS: 0, S: 0, M: 0, L: 0, XL: 1.5, XXL: 2.5 }, colorData: {},
-      sortOrder: 10,
-      sizes: [
-        { code: 'XS', widthMm: 460, heightMm: 660 }, { code: 'S', widthMm: 480, heightMm: 680 },
-        { code: 'M', widthMm: 520, heightMm: 710 }, { code: 'L', widthMm: 560, heightMm: 740 },
-        { code: 'XL', widthMm: 600, heightMm: 770 }, { code: 'XXL', widthMm: 640, heightMm: 800 }
-      ],
-      colorHexes: ['#f2f2f2', '#0b0b0b', '#6b6b6b'], enabled: true, isDefault: true
-    },
-    {
-      id: 'hoodie', name: 'Trui / Hoodie', description: 'Warme hoodie met full-color print',
-      mockupPath: 'assets/tshirt_mockup.png', basePrice: 54.95, extraDesignFee: 7.50,
-      priceMultiplier: 1.55, extraDesignFeeMultiplier: 1.1, colorPrices: {},
-      sizePrices: { XS: 0, S: 0, M: 0, L: 0, XL: 2.0, XXL: 4.0 }, colorData: {},
-      sortOrder: 20,
-      sizes: [
-        { code: 'XS', widthMm: 500, heightMm: 650 }, { code: 'S', widthMm: 530, heightMm: 680 },
-        { code: 'M', widthMm: 560, heightMm: 710 }, { code: 'L', widthMm: 590, heightMm: 740 },
-        { code: 'XL', widthMm: 620, heightMm: 770 }, { code: 'XXL', widthMm: 650, heightMm: 800 }
-      ],
-      colorHexes: ['#f2f2f2', '#0b0b0b', '#6b6b6b'], enabled: true, isDefault: false
-    },
-    {
-      id: 'beachflag', name: 'Beachflag', description: 'Outdoor beachflag met custom ontwerp',
-      mockupPath: 'assets/tshirt_mockup.png', basePrice: 84.95, extraDesignFee: 10.0,
-      priceMultiplier: 2.4, extraDesignFeeMultiplier: 1.25, colorPrices: {},
-      sizePrices: { S: 0, M: 10.0, L: 25.0 }, colorData: {},
-      sortOrder: 30,
-      sizes: [
-        { code: 'S', widthMm: 600, heightMm: 2300 },
-        { code: 'M', widthMm: 700, heightMm: 2900 },
-        { code: 'L', widthMm: 800, heightMm: 3500 }
-      ],
-      colorHexes: ['#f2f2f2', '#0b0b0b', '#6b6b6b'], enabled: true, isDefault: false
-    },
-    {
-      id: 'banner', name: 'Spandoek', description: 'PVC banner voor events en acties',
-      mockupPath: 'assets/tshirt_mockup.png', basePrice: 69.95, extraDesignFee: 10.0,
-      priceMultiplier: 1.95, extraDesignFeeMultiplier: 1.15, colorPrices: {},
-      sizePrices: { S: 0, M: 20.0, L: 45.0 }, colorData: {},
-      sortOrder: 40,
-      sizes: [
-        { code: 'S', widthMm: 1000, heightMm: 700 },
-        { code: 'M', widthMm: 2000, heightMm: 1000 },
-        { code: 'L', widthMm: 3000, heightMm: 1500 }
-      ],
-      colorHexes: ['#f2f2f2', '#0b0b0b', '#6b6b6b'], enabled: true, isDefault: false
+      enabled: true
     }
   ]
 };
@@ -944,12 +968,17 @@ function sanitizeProducts(products) {
     if (!sizes.length) {
       const builtIn = DEFAULT_PRODUCT_SIZES_BY_ID[idBase];
       if (builtIn?.length) sizes = builtIn.map(s => ({ ...s }));
-      else sizes = Object.keys(DEFAULT_SIZE_MM).map(code => ({ code, widthMm: DEFAULT_SIZE_MM[code][0], heightMm: DEFAULT_SIZE_MM[code][1] }));
+      else sizes = [{ code: 'STD', widthMm: 100, heightMm: 100 }];
+    }
+    const model3d = sanitizeModel3d(p?.model3d);
+    let category = String(p?.category || '').trim().toLowerCase();
+    if (category !== '3d' && category !== 'standard') {
+      category = model3d.enabled ? '3d' : 'standard';
     }
     out.push({
       id: idBase, name, description, mockupPath: mockupPath || 'assets/tshirt_mockup.png',
       basePrice, extraDesignFee, priceMultiplier, extraDesignFeeMultiplier,
-      model3d: sanitizeModel3d(p?.model3d),
+      model3d, category,
       colorPrices, sizePrices, colorData,
       sortOrder: Number.isFinite(Number(p?.sortOrder)) ? Math.max(0, Math.min(9999, Math.round(Number(p.sortOrder)))) : ((idx + 1) * 10),
       sizes, colorHexes, enabled: p?.enabled !== false, isDefault: !!p?.isDefault, isFeatured: !!p?.isFeatured
@@ -1006,6 +1035,7 @@ async function getConfig() {
   merged.email.templates = { ...(DEFAULT_CONFIG.email?.templates || {}), ...((stored.email && stored.email.templates) || {}) };
   if (Array.isArray(merged.sizes)) merged.sizes = sortSizes(merged.sizes);
   merged.products = sanitizeProducts(merged.products);
+  merged.site = { ...(DEFAULT_CONFIG.site || {}), ...(stored.site || {}) };
   return merged;
 }
 
@@ -1016,7 +1046,7 @@ async function ensureOwner() {
   const email = String(process.env.OWNER_EMAIL || 'owner@nebulous.local').trim().toLowerCase();
   const password = String(process.env.OWNER_PASSWORD || 'Owner!2026');
   const firstName = String(process.env.OWNER_FIRST_NAME || 'Owner').trim().slice(0, 80) || 'Owner';
-  const lastName = String(process.env.OWNER_LAST_NAME || 'Nebulous').trim().slice(0, 80) || 'Nebulous';
+  const lastName = String(process.env.OWNER_LAST_NAME || 'Digitify').trim().slice(0, 80) || 'Digitify';
   const hash = bcrypt.hashSync(password, 10);
   await db.prepare(`INSERT INTO users(email, password_hash, first_name, last_name, role, status, email_verified)
               VALUES(?, ?, ?, ?, 'OWNER', 'ACTIVE', 1)`)

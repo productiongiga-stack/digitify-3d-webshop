@@ -7,22 +7,22 @@
     --font-body: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-heading: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
 
-    --bg: #0a0a0a;
-    --bg-2: #111111;
-    --bg-3: #161616;
-    --bg-card: #141414;
-    --bg-card-h: #1c1c1c;
-    --bg-input: #101010;
+    --bg: #fff9f2;
+    --bg-2: #f7f2ea;
+    --bg-3: #f0ebe3;
+    --bg-card: #ffffff;
+    --bg-card-h: #faf7f2;
+    --bg-input: #faf7f2;
 
-    --text: #ffffff;
-    --text-2: #d1d1d1;
-    --text-3: #8a8a8a;
+    --text: #0a0a0a;
+    --text-2: #3d4450;
+    --text-3: #6b7280;
 
-    --accent: #ffffff;
-    --accent-soft: rgba(255,255,255,0.10);
-    --brand-accent: #ffffff;
-    --brand-accent-2: #bdbdbd;
-    --brand-on-accent: #000000;
+    --accent: #ffaf51;
+    --accent-soft: rgba(255, 175, 81, 0.18);
+    --brand-accent: #ffaf51;
+    --brand-accent-2: #e8983a;
+    --brand-on-accent: #0a0a0a;
     --brand-gradient: linear-gradient(135deg, #ffffff, #bdbdbd);
     --invoice-open-bg: #1d4ed8;
     --invoice-open-text: #eff6ff;
@@ -32,10 +32,10 @@
     --invoice-due-border: rgba(245,158,11,.55);
 
     /* UI surfaces */
-    --nav-bg: rgba(10,10,10,.72);
-    --btn-bg: #ffffff;
-    --btn-fg: #000000;
-    --btn-bg-hover: #dcdcdc;
+    --nav-bg: rgba(255, 249, 242, 0.88);
+    --btn-bg: #ffaf51;
+    --btn-fg: #0a0a0a;
+    --btn-bg-hover: #e8983a;
     --preview-bg: var(--bg-card);
     --surface-glass: rgba(255,255,255,.065);
     --surface-glass-strong: rgba(255,255,255,.105);
@@ -57,9 +57,9 @@
     --r-xl: 24px;
     --ease: cubic-bezier(.4,0,.2,1);
     --section-bg: var(--bg-2);
-    --orb-1-color: rgba(255,255,255,.55);
-    --orb-2-color: rgba(189,189,189,.55);
-    --orb-3-color: rgba(107,107,107,.55);
+    --orb-1-color: rgba(255, 175, 81, 0.45);
+    --orb-2-color: rgba(232, 152, 58, 0.35);
+    --orb-3-color: rgba(255, 175, 81, 0.25);
 }
 
 

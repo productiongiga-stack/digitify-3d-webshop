@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard — NEBULOUS</title>
+<title>Dashboard — Digitify</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/digitify-shell.css">
 </head>
-<body>
+<body class="theme-light digitify-shop-body" data-page-title="Dashboard">
   <div class="ambient-bg">
     <div class="ambient-orb orb-1"></div>
     <div class="ambient-orb orb-2"></div>
@@ -19,7 +20,7 @@
 
   <nav class="nav" id="nav">
     <div class="nav-inner">
-      <a href="/" class="logo"><span class="logo-mark">&#x2726;</span><span>NEBULOUS</span></a>
+      <a href="/" class="logo"><span class="logo-mark">&#x2726;</span><span data-brand-name>Digitify</span></a>
       <div class="nav-links">
         <a href="/designer" class="nav-link">Designer</a>
         <a href="/dashboard" class="nav-link active">Dashboard</a>
@@ -54,6 +55,7 @@
   </main>
 
   <script src="/app.js"></script>
+  <script src="/digitify-shell.js"></script>
   <script>
     const STATUS_FLOW = [
       { code: 'NEW', label: 'Nieuw', icon: '&#x25CB;' },

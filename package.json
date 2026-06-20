@@ -1,5 +1,5 @@
 {
-  "name": "nebulous",
+  "name": "digitify-3d-webshop",
   "version": "1.0.0",
   "private": true,
   "type": "commonjs",
@@ -8,6 +8,7 @@
     "dev": "node --watch server.js",
     "test": "node --test test/**/*.test.js",
     "seed:owner": "node scripts/seed-owner.js",
+    "seed:catalog": "node scripts/seed-digitify-catalog.js",
     "check:db-migration": "node scripts/check-db-migration.js"
   },
   "dependencies": {

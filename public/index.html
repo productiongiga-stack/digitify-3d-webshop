@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NEBULOUS - 3D product webshop</title>
-  <meta name="description" content="Bekijk producten in 3D, kies je variant en bestel direct of met goedkeuring.">
+  <title>Digitify Webshop — NFC & LED producten</title>
+  <meta name="description" content="Digitify webshop — NFC-tags, LED lichtbakken en smart marketingproducten met 3D preview.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="NEBULOUS - 3D product webshop">
-  <meta property="og:description" content="Bekijk producten in 3D, kies je variant en bestel direct of met goedkeuring.">
-  <meta property="og:image" content="/assets/tshirt_mockup.png">
+  <meta property="og:title" content="Digitify Webshop">
+  <meta property="og:description" content="Bekijk NFC-tags, LED lichtbakken en meer in 3D. Bestel direct online.">
+  <meta property="og:image" content="/assets/products/digitify/led-lichtbak-kabel/poster.png">
   <meta property="og:url" content="/">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="NEBULOUS - 3D product webshop">
@@ -20,28 +20,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="digitify-shell.css">
 </head>
-<body class="storefront-page">
-  <nav class="nav" id="nav">
-    <div class="nav-inner">
-      <a href="/" class="logo">
-        <span class="logo-mark" data-logo-mark>&#x2726;</span>
-        <span data-brand-name>NEBULOUS</span>
-      </a>
-      <div class="nav-links">
-        <a href="/" class="nav-link active">Producten</a>
-        <a href="/shop" class="nav-link">Catalogus</a>
-        <a href="/prijzen" class="nav-link">Prijzen</a>
-        <a href="/support" class="nav-link">Support</a>
-      </div>
-      <div class="nav-right" style="display:flex;gap:.5rem;align-items:center">
-        <div class="nav-price-tag">Vanaf <strong id="navBasePrice">&euro;34,95</strong></div>
-        <span data-theme-switch></span>
-        <span data-cart-icon></span>
-        <span data-nav-user style="display:flex;gap:.5rem;align-items:center"></span>
-      </div>
-    </div>
-  </nav>
+<body class="storefront-page theme-light digitify-shop-body" data-nav="producten">
 
   <main>
     <section class="storefront-hero" id="productHero">
@@ -83,6 +64,7 @@
         <div class="storefront-options-head">
           <span class="section-eyebrow">Productkeuze</span>
           <h2 class="section-title">Selecteer je product en variant</h2>
+          <div class="shop-filter-tabs" id="storefrontCategoryFilters"></div>
         </div>
         <div class="storefront-layout">
           <div class="storefront-products" id="storefrontProducts"></div>
@@ -157,6 +139,7 @@
   <div id="siteFooterMount"></div>
 
   <script src="app.js"></script>
+  <script src="digitify-shell.js"></script>
   <script src="site-page.js"></script>
   <script type="module" src="storefront.js"></script>
 </body>

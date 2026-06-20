@@ -75,7 +75,8 @@ const state = {
   miniPreviews: new Map(),
   miniVisible: new Set(),
   reduceMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false,
-  pageVisible: true
+  pageVisible: true,
+  categoryFilter: 'all'
 };
 
 const touchLikeDevice = window.matchMedia?.('(hover: none), (pointer: coarse)')?.matches || false;
@@ -370,6 +371,34 @@ function setSelectionStageMediaMode(mode) {
   setStageMediaMode($('#storefrontSelectionStage'), mode);
 }
 
+function filteredProducts() {
+  const filter = String(state.categoryFilter || 'all').toLowerCase();
+  if (filter === '3d') return state.products.filter((p) => p.category === '3d' || hasProductModel3d(p));
+  if (filter === 'standard') return state.products.filter((p) => p.category === 'standard' && !hasProductModel3d(p));
+  return state.products;
+}
+
+function renderCategoryFilters() {
+  const host = $('#storefrontCategoryFilters');
+  if (!host) return;
+  const current = String(state.categoryFilter || 'all').toLowerCase();
+  const tabs = [
+    { id: 'all', label: 'Alle producten' },
+    { id: '3d', label: 'Met 3D preview' },
+    { id: 'standard', label: 'Standaard' }
+  ];
+  host.innerHTML = tabs.map((tab) =>
+    `<button type="button" class="shop-filter-tab${current === tab.id ? ' active' : ''}" data-category-filter="${tab.id}">${escapeHtml(tab.label)}</button>`
+  ).join('');
+}
+
+function productFromUrlParam() {
+  const raw = new URLSearchParams(window.location.search).get('product');
+  const id = String(raw || '').trim().toLowerCase();
+  if (!id) return null;
+  return state.products.find((p) => String(p.id || '').toLowerCase() === id) || null;
+}
+
 function productCardMedia(product) {
   const poster = productPreviewPoster(product);
   const hasMini3d = hasProductModel3d(product);
@@ -402,7 +431,7 @@ function renderHero() {
   if (!product) return;
   const config = state.config || {};
   const price = productPrice(product);
-  $('#heroProductKicker').textContent = `${config.brand?.name || 'NEBULOUS'} product`;
+  $('#heroProductKicker').textContent = `${config.brand?.name || 'Digitify'} · ${product.category === '3d' || hasProductModel3d(product) ? '3D preview' : 'Product'}`;
   $('#heroProductTitle').textContent = product.name || 'Product';
   $('#heroProductDescription').textContent = product.description || 'Bekijk dit product in 3D en bestel zonder uploadstap.';
   $('#navBasePrice').textContent = fmtEUR(price);
@@ -438,12 +467,17 @@ function renderHero() {
 
 function renderOptions() {
   const selectedId = String(state.selectedProduct?.id || '');
-  $('#storefrontProducts').innerHTML = state.products.map((product) => {
+  const visible = filteredProducts();
+  $('#storefrontProducts').innerHTML = visible.map((product) => {
     const active = String(product.id || '') === selectedId;
+    const badge = (product.category === '3d' || hasProductModel3d(product))
+      ? '<span class="product-badge-3d">3D preview</span>'
+      : '';
     return `
       <button class="storefront-product-card${active ? ' active' : ''}" type="button" data-product-id="${escapeHtml(product.id)}">
         ${productCardMedia(product)}
         <span>
+          ${badge}
           <strong>${escapeHtml(product.name || 'Product')}</strong>
           <small>${escapeHtml(product.description || 'Product in catalogus')}</small>
         </span>
@@ -1100,12 +1134,27 @@ async function addSelectedToCart() {
 async function init() {
   const config = await NEB.config();
   state.config = config;
+  window.NEB_CONFIG = config;
+  if (window.NEB?.applyBranding) NEB.applyBranding(config);
   resolveAssetUrl = createAssetUrlResolver(config);
   state.products = (Array.isArray(config.products) ? config.products : []).filter((p) => p && p.enabled !== false);
-  const featured = state.products.find((p) => p.isFeatured) || state.products.find((p) => p.isDefault) || state.products[0];
+  renderCategoryFilters();
+  const fromUrl = productFromUrlParam();
+  const featured = fromUrl
+    || state.products.find((p) => p.isFeatured)
+    || state.products.find((p) => p.isDefault)
+    || state.products[0];
   if (!featured) return;
   selectProduct(featured);
   updateReduceMotionNotice();
+
+  $('#storefrontCategoryFilters')?.addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-category-filter]');
+    if (!tab) return;
+    state.categoryFilter = String(tab.dataset.categoryFilter || 'all');
+    renderCategoryFilters();
+    renderOptions();
+  });
 
   $('#storefrontProducts')?.addEventListener('click', (event) => {
     const card = event.target.closest('[data-product-id]');
