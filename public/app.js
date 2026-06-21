@@ -542,6 +542,7 @@ const NEB = (() => {
             img.onerror = () => {
               el.classList.remove('has-logo-image');
               el.textContent = logoMark;
+              document.querySelectorAll('.auth-logo').forEach((link) => link.classList.remove('auth-logo--image'));
             };
           }
         } else {
@@ -549,8 +550,11 @@ const NEB = (() => {
           el.textContent = logoMark;
         }
       });
+      document.querySelectorAll('.auth-logo').forEach((link) => {
+        link.classList.toggle('auth-logo--image', !!logoSrc);
+      });
       if (cfg?.brand?.name) {
-        document.querySelectorAll('.logo span:last-child, .auth-logo span:last-child').forEach(el => {
+        document.querySelectorAll('.logo span:last-child, .auth-logo [data-brand-name]').forEach(el => {
           el.textContent = cfg.brand.name;
         });
       }
