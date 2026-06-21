@@ -276,7 +276,12 @@ function syncHeroViewFromCamera() {
   displayModel.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(displayModel);
   const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
   box.getCenter(center);
+  box.getSize(size);
+  if (isCompactHeroViewport()) {
+    center.y -= Math.max(size.y, size.z) * 0.08;
+  }
   if (!state.heroView.target) state.heroView.target = new THREE.Vector3();
   state.heroView.target.copy(center);
   state.heroView.baseDistance = Math.max(0.08, state.camera.position.distanceTo(center));
@@ -351,14 +356,14 @@ function isTabletHeroViewport() {
 function resolveHeroFitBase(manifest) {
   const userScale = modelDisplayScale(manifest);
   let margin = 1.22;
-  if (isCompactHeroViewport()) margin = 1.06;
+  if (isCompactHeroViewport()) margin = 0.98;
   else if (isTabletHeroViewport()) margin = 1.1;
-  return { userScale, margin, yLift: 0.02 };
+  return { userScale, margin, yLift: isCompactHeroViewport() ? 0.01 : 0.02 };
 }
 
 function resolveHeroFitLimits() {
   if (isCompactHeroViewport()) {
-    return { minAxis: 0.5, maxAxis: 0.76, maxBoost: 1.4 };
+    return { minAxis: 0.54, maxAxis: 0.82, maxBoost: 1.45 };
   }
   if (isTabletHeroViewport()) {
     return { minAxis: 0.48, maxAxis: 0.74, maxBoost: 1.32 };

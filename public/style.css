@@ -1996,6 +1996,19 @@ body.theme-light .ph-box{background:rgba(0,0,0,0.03)}
     text-decoration-color:color-mix(in srgb, var(--brand-accent, #5eead4) 85%, #fff);
     transform:translateY(-1px);
 }
+.storefront-hero-actions-more{
+    display:inline-flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:.15rem .55rem;
+}
+.storefront-hero-actions-more .hero-secondary-btn + .hero-secondary-btn:not([hidden])::before{
+    content:'·';
+    margin-right:.55rem;
+    color:color-mix(in srgb, var(--text-2, rgba(255,255,255,.75)) 55%, transparent);
+    text-decoration:none;
+    pointer-events:none;
+}
 #heroDesignLink[hidden],
 .hero-secondary-btn--designer[hidden]{
     display:none !important;
@@ -2693,7 +2706,7 @@ body.theme-light .ph-box{background:rgba(0,0,0,0.03)}
     .storefront-hero{
         min-height:auto;
         align-items:stretch;
-        padding:var(--digitify-header-h, 65px) 0 3.25rem;
+        padding:0 0 2.25rem;
         display:flex;
         flex-direction:column;
     }
@@ -2706,17 +2719,17 @@ body.theme-light .ph-box{background:rgba(0,0,0,0.03)}
         max-width:none;
         margin-inline:0;
         margin-top:0;
-        aspect-ratio:1 / 1;
-        height:auto;
-        min-height:0;
-        max-height:none;
+        aspect-ratio:unset;
+        height:min(78vw, 470px);
+        min-height:min(78vw, 470px);
+        max-height:min(78vw, 470px);
         align-self:stretch;
     }
     .storefront-hero-3d-dock{
         order:3;
         width:100%;
         max-width:min(1440px, calc(100vw - 2rem));
-        margin:.85rem auto 0;
+        margin:.35rem auto 0;
         padding:0 1rem;
     }
     .storefront-hero-3d-dock-track{
@@ -2729,11 +2742,105 @@ body.theme-light .ph-box{background:rgba(0,0,0,0.03)}
     }
     .storefront-hero-copy{
         order:2;
-        width:100%;
-        max-width:min(1440px, calc(100vw - 2rem));
+        width:calc(100% - 1.5rem);
+        max-width:min(1440px, calc(100vw - 1.5rem));
+        margin:-.85rem auto 0;
+        padding:1.15rem 1.1rem 1.05rem;
+        gap:.8rem;
+        position:relative;
+        z-index:4;
+        border:1px solid color-mix(in srgb, var(--border) 82%, var(--brand-accent) 18%);
+        border-radius:1rem;
+        background:color-mix(in srgb, var(--bg-card) 97%, var(--brand-accent) 3%);
+        box-shadow:
+            0 18px 42px color-mix(in srgb, var(--text) 7%, transparent),
+            inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+    }
+    .storefront-hero-copy .hero-copy-intro{
+        align-items:center;
+        text-align:center;
+        gap:.55rem;
+        padding-bottom:.1rem;
+    }
+    .storefront-page .storefront-hero-copy .storefront-kicker.hero-eyebrow{
+        align-self:center;
+        padding:.34rem .72rem;
+        border-radius:999px;
+        border:1px solid color-mix(in srgb, var(--brand-accent) 24%, var(--border));
+        background:color-mix(in srgb, var(--brand-accent) 9%, var(--bg-card));
+        font-size:.62rem;
+        letter-spacing:.14em;
+    }
+    .storefront-page .storefront-hero-copy .hero-headline,
+    .storefront-page .storefront-hero-copy h1.hero-headline{
+        font-size:clamp(1.65rem, 7.2vw, 2.15rem);
+        line-height:1.08;
+        letter-spacing:-.03em;
+        text-align:center;
+    }
+    .storefront-page .storefront-hero-copy .hero-lead{
+        max-width:22rem;
         margin-inline:auto;
-        margin-top:.85rem;
-        padding-inline:1rem;
+        font-size:.92rem;
+        line-height:1.55;
+        text-align:center;
+        color:color-mix(in srgb, var(--text-2) 88%, var(--text));
+    }
+    .storefront-hero-copy .storefront-hero-facts{
+        justify-content:center;
+        gap:.35rem .45rem;
+        margin:0;
+        padding:.2rem 0 0;
+    }
+    .storefront-page .storefront-hero-copy .storefront-hero-facts .hero-fact{
+        font-size:.74rem;
+        font-weight:500;
+        padding:.3rem .62rem;
+        border-radius:999px;
+        border:1px solid color-mix(in srgb, var(--border) 82%, transparent);
+        background:color-mix(in srgb, var(--bg-2) 90%, var(--bg-card));
+    }
+    .storefront-page .storefront-hero-copy .storefront-hero-facts .hero-fact:not(:last-child)::after{
+        display:none;
+    }
+    .storefront-page .storefront-hero-copy .hero-fact[data-fact="price"]{
+        font-weight:600;
+        color:var(--text);
+        border-color:color-mix(in srgb, var(--brand-accent) 30%, var(--border));
+        background:color-mix(in srgb, var(--brand-accent) 12%, var(--bg-card));
+    }
+    .storefront-hero-copy .storefront-hero-actions{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:.5rem;
+        margin-top:.15rem;
+        padding:.75rem 0 0;
+        border-top:1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    }
+    .storefront-page .storefront-hero-actions .hero-cta--storefront{
+        width:min(100%, 19.5rem);
+        align-self:center;
+        justify-content:center;
+        min-height:2.75rem;
+        padding:.65rem 1.35rem;
+        font-size:.86rem;
+        box-shadow:0 10px 24px rgba(15,23,42,.18), inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .storefront-hero-actions-more{
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        flex-wrap:wrap;
+        gap:.1rem .7rem;
+        width:100%;
+        min-height:2rem;
+        padding:.15rem 0 0;
+    }
+    .storefront-hero-actions-more .hero-secondary-btn{
+        min-height:2rem;
+        padding:.28rem .2rem;
+        font-size:.8rem;
     }
     .storefront-hero h1{
         font-size:clamp(2.2rem, 9vw, 3rem);
@@ -3356,6 +3463,11 @@ body.theme-light .storefront-hero .hero-lead{
 }
 body.theme-light .storefront-hero .storefront-kicker.hero-eyebrow{
     color:color-mix(in srgb, var(--brand-accent) 70%, var(--text));
+}
+body.theme-light .storefront-page .storefront-hero-copy{
+    border-color:color-mix(in srgb, var(--border) 88%, var(--brand-accent) 12%);
+    background:var(--bg-card);
+    box-shadow:0 16px 38px color-mix(in srgb, var(--text) 6%, transparent), inset 0 1px 0 rgba(255,255,255,.85);
 }
 body.theme-light .storefront-page .storefront-hero-actions .hero-cta--storefront{
     background:linear-gradient(165deg, #111827 0%, #1f2937 52%, #374151 100%);

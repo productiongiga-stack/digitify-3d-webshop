@@ -799,13 +799,16 @@ body.digitify-shop-body .digitify-header__cta {
 @media (max-width: 520px) {
   .storefront-hero-actions {
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
+    gap: 0.5rem;
   }
 
-  .storefront-hero-actions .hero-cta,
-  .storefront-hero-actions .hero-secondary-btn {
-    width: 100%;
-    text-align: center;
+  .storefront-hero-actions .hero-cta {
+    width: min(100%, 19.5rem);
+    align-self: center;
+  }
+
+  .storefront-hero-actions-more {
     justify-content: center;
   }
 
