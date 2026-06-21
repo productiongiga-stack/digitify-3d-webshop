@@ -2183,22 +2183,22 @@ body.theme-light .ph-box{background:rgba(0,0,0,0.03)}
     transition:background .2s var(--ease), border-color .2s var(--ease), opacity .2s var(--ease);
     -webkit-tap-highlight-color:transparent;
 }
-.storefront-selection-stage.is-selection-3d-loading ~ .storefront-selection-actions .storefront-selection-3d-toggle{
+.storefront-selection-stage.is-selection-3d-loading .storefront-selection-3d-toggle--corner{
     opacity:.85;
 }
-.storefront-selection-actions{
-    display:flex;
-    padding:.65rem .85rem;
-    border-bottom:1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    background:color-mix(in srgb, var(--bg-card) 98%, var(--bg-2));
-}
-.storefront-selection-actions:not(:has(.storefront-selection-3d-toggle:not([hidden]))){
-    display:none;
-}
-.storefront-selection-actions .storefront-selection-3d-toggle{
-    width:100%;
-    min-height:2.65rem;
-    font-size:.74rem;
+.storefront-selection-3d-toggle--corner{
+    position:absolute;
+    top:1rem;
+    right:1rem;
+    z-index:5;
+    width:auto;
+    min-height:2.45rem;
+    padding:.45rem .72rem;
+    box-shadow:
+        0 8px 22px color-mix(in srgb, var(--text) 10%, transparent),
+        inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+    backdrop-filter:blur(10px);
+    background:color-mix(in srgb, var(--bg-card) 88%, transparent);
 }
 .storefront-selection-3d-toggle[hidden]{
     display:none !important;
@@ -2969,11 +2969,8 @@ body.theme-light .ph-box{background:rgba(0,0,0,0.03)}
         padding:.5rem;
     }
     .storefront-selection-preview[data-preview-mode="2d"] .storefront-selection-meta{
-        padding-top:.85rem;
-    }
-    .storefront-selection-actions:not(:has(.storefront-selection-3d-toggle:not([hidden]))) + .storefront-selection-meta{
-        border-top:1px solid color-mix(in srgb, var(--border) 72%, transparent);
         padding-top:.65rem;
+        border-top:1px solid color-mix(in srgb, var(--border) 72%, transparent);
     }
     .storefront-selection-preview[data-preview-mode="3d"] .storefront-selection-stage{
         height:min(88vw, 400px);
@@ -2993,12 +2990,12 @@ body.theme-light .ph-box{background:rgba(0,0,0,0.03)}
         bottom:.5rem;
         gap:.3rem;
     }
-    .storefront-selection-actions{
-        padding:.58rem .75rem;
-    }
-    .storefront-selection-actions .storefront-selection-3d-toggle{
-        min-height:2.55rem;
-        font-size:.7rem;
+    .storefront-selection-3d-toggle--corner{
+        top:.9rem;
+        right:.9rem;
+        min-height:2.35rem;
+        padding:.4rem .62rem;
+        font-size:.66rem;
     }
     .storefront-selection-controls{
         right:.45rem;

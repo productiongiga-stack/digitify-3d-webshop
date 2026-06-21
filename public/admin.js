@@ -2964,6 +2964,19 @@ function readStoreMockupPathFromModal(modal) {
   return String(modal?.querySelector('#pmMockupPath')?.value || '').trim().replace(/^\/+/, '');
 }
 
+function syncStoreMockupToPosterField(modal, mockupPath, baseProduct = null) {
+  const path = String(mockupPath || '').trim().replace(/^\/+/, '');
+  if (!path) return;
+  const posterInput = modal?.querySelector('#pmModel3dPoster');
+  if (!posterInput) return;
+  const currentPoster = String(posterInput.value || '').trim().replace(/^\/+/, '');
+  const basePoster = String(baseProduct?.model3d?.posterPath || '').trim().replace(/^\/+/, '');
+  const baseMockup = String(baseProduct?.mockupPath || '').trim().replace(/^\/+/, '');
+  if (!currentPoster || currentPoster === basePoster || currentPoster === baseMockup) {
+    posterInput.value = path;
+  }
+}
+
 function effectiveDesignerMockupPathFromModal(modal, baseProduct = null) {
   const designerPath = readDesignerMockupPathFromModal(modal);
   if (designerPath) return designerPath;
@@ -4896,6 +4909,7 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
       if (btn) { btn.disabled = true; btn.textContent = 'Upload...'; }
       const out = await uploadProductMockupFile(file);
       if (modal.querySelector('#pmMockupPath')) modal.querySelector('#pmMockupPath').value = out.path || '';
+      syncStoreMockupToPosterField(modal, out.path, isNew ? null : draft.products?.[productIdx]);
       const thumb = modal.querySelector('#pmMockupThumb');
       if (thumb && out.path) thumb.innerHTML = `<img src="/${escAttr(out.path)}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" alt="">`;
       NEB.toast('Mockup geüpload', 'success');
@@ -5094,7 +5108,11 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
     }
 
     const modelPath = readModel3dFieldFromModal(modal, baseProduct, 'modelPath', '#pmModel3dPath');
-    const posterPath = readModel3dFieldFromModal(modal, baseProduct, 'posterPath', '#pmModel3dPoster');
+    let posterPath = readModel3dFieldFromModal(modal, baseProduct, 'posterPath', '#pmModel3dPoster');
+    const basePoster = String(baseProduct?.model3d?.posterPath || '').trim().replace(/^\/+/, '');
+    if (storeMockupPath && (!posterPath || posterPath === basePoster)) {
+      posterPath = storeMockupPath;
+    }
     const materialPath = readModel3dFieldFromModal(modal, baseProduct, 'materialPath', '#pmModel3dMaterial');
     const resourceDir = (() => {
       const explicit = readModel3dFieldFromModal(modal, baseProduct, 'resourceDir', '#pmModel3dResourceDir');

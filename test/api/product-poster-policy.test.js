@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { validateProductsPosterPolicy, coalesceProductsPosterPaths } = require('../../lib/product-poster-policy');
+const { validateProductsPosterPolicy, coalesceProductsPosterPaths, syncStoreMockupToModel3dPoster } = require('../../lib/product-poster-policy');
 
 describe('coalesceProductsPosterPaths', () => {
   it('fills posterPath from mockupPath when missing', () => {
@@ -11,6 +11,34 @@ describe('coalesceProductsPosterPaths', () => {
     }]);
     assert.equal(out[0].model3d.posterPath, 'assets/products/chair/mockup.png');
     assert.equal(validateProductsPosterPolicy(out).length, 0);
+  });
+});
+
+describe('syncStoreMockupToModel3dPoster', () => {
+  it('updates bundled poster when store mockup is uploaded', () => {
+    const out = syncStoreMockupToModel3dPoster([{
+      id: 'lichtbak',
+      mockupPath: 'assets/products/mockup-1234-abcd.png',
+      model3d: {
+        enabled: true,
+        modelPath: 'assets/products/digitify/lichtbak/model.glb',
+        posterPath: 'assets/products/digitify/lichtbak/poster.png'
+      }
+    }]);
+    assert.equal(out[0].model3d.posterPath, 'assets/products/mockup-1234-abcd.png');
+  });
+
+  it('leaves distinct custom poster untouched', () => {
+    const out = syncStoreMockupToModel3dPoster([{
+      id: 'lichtbak',
+      mockupPath: 'assets/products/mockup-1234-abcd.png',
+      model3d: {
+        enabled: true,
+        modelPath: 'assets/products/digitify/lichtbak/model.glb',
+        posterPath: 'assets/products/digitify/lichtbak/custom-hero.webp'
+      }
+    }]);
+    assert.equal(out[0].model3d.posterPath, 'assets/products/digitify/lichtbak/custom-hero.webp');
   });
 });
 

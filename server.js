@@ -42,7 +42,7 @@ const { securityHeadersMiddleware } = require('./lib/security-headers');
 const { mirrorPublicAssetIfConfigured } = require('./lib/asset-storage');
 const { getUploadPlatformLimits } = require('./lib/direct-upload-limit');
 const { handleProductMockupUpload, isImageUpload } = require('./lib/product-mockup-upload');
-const { validateProductsPosterPolicy, coalesceProductsPosterPaths } = require('./lib/product-poster-policy');
+const { validateProductsPosterPolicy, coalesceProductsPosterPaths, syncStoreMockupToModel3dPoster } = require('./lib/product-poster-policy');
 const { captureServerError } = require('./lib/observability');
 const { registerClientLogRoutes } = require('./routes/client-log');
 const { registerHealthRoutes } = require('./routes/health');
@@ -5106,7 +5106,7 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER', 'ADMIN'), async (
     cfg.seo = nextSeo;
   }
   if (Array.isArray(cfg.products)) {
-    cfg.products = coalesceProductsPosterPaths(cfg.products);
+    cfg.products = syncStoreMockupToModel3dPoster(coalesceProductsPosterPaths(cfg.products));
     const posterGaps = validateProductsPosterPolicy(cfg.products);
     if (posterGaps.length) {
       return res.status(400).json({
@@ -5138,7 +5138,8 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER', 'ADMIN'), async (
 async function saveCatalogProducts(nextProducts, beforeConfig) {
   const before = beforeConfig || await getConfig();
   const coalesced = coalesceProductsPosterPaths(Array.isArray(nextProducts) ? nextProducts : []);
-  const sanitized = sanitizeProducts(coalesced);
+  const synced = syncStoreMockupToModel3dPoster(coalesced);
+  const sanitized = sanitizeProducts(synced);
   const posterGaps = validateProductsPosterPolicy(sanitized);
   if (posterGaps.length) {
     const err = new Error('3D-producten in de shop vereisen een poster. Upload of genereer een poster per product.');

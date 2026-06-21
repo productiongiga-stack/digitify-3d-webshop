@@ -204,8 +204,10 @@ function productShowsDesignerLink(product) {
 }
 
 function productPreviewPoster(product) {
+  const mockup = String(product?.mockupPath || '').trim().replace(/^\/+/, '');
   const manifest = modelManifest(product);
-  const path = String(manifest.posterPath || product?.mockupPath || '').trim();
+  const useStoreMockup = mockup && mockup !== 'assets/tshirt_mockup.png';
+  const path = String(useStoreMockup ? mockup : (manifest.posterPath || mockup || '')).trim();
   return path ? assetUrl(path) : '';
 }
 
