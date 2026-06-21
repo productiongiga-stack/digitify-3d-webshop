@@ -78,6 +78,7 @@ function convertDatetime(sql) {
       `(NOW() + INTERVAL '${h} hours')`)
     .replace(/datetime\s*\(\s*'now'\s*,\s*'(-?\d+)\s*minutes?'\s*\)/gi, (_, m) =>
       `(NOW() + INTERVAL '${m} minutes')`)
+    .replace(/datetime\s*\(\s*'now'\s*,\s*\?\s*\)/gi, `(NOW() + (?::interval))`)
     .replace(/datetime\s*\(\s*'now'\s*\)/gi, 'NOW()')
     // datetime(column) → column::timestamptz
     .replace(/datetime\s*\(\s*([^)]+)\s*\)/gi, '$1::timestamptz');
@@ -205,5 +206,6 @@ module.exports = {
   close,
   getPool,
   initSchema,
+  convertDatetime,
   pragma: () => {} // no-op for SQLite compat
 };

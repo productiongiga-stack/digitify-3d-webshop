@@ -355,6 +355,11 @@ async function writePublicAsset(relativePath, buffer, mime) {
 async function readStoredUpload(relativePath) {
   const normalized = normalizeUploadPath(relativePath);
   if (!normalized) return null;
+  // On Vercel/serverless /tmp is ephemeral — prefer durable PostgreSQL blobs first.
+  if (USE_WRITABLE_TMP) {
+    const fromDb = await loadUploadBlob(normalized.rel);
+    if (fromDb?.buffer?.length) return fromDb;
+  }
   if (fs.existsSync(normalized.abs)) {
     const buffer = fs.readFileSync(normalized.abs);
     return {
@@ -367,7 +372,10 @@ async function readStoredUpload(relativePath) {
       updatedAt: null
     };
   }
-  return loadUploadBlob(normalized.rel);
+  if (!USE_WRITABLE_TMP) {
+    return loadUploadBlob(normalized.rel);
+  }
+  return null;
 }
 async function copyStoredUpload(sourcePath, targetPath, opts = {}) {
   const source = await readStoredUpload(sourcePath);
@@ -627,9 +635,13 @@ async function logAudit({ actorUserId = null, actorEmail = null, action, entityT
   if (details != null) {
     try { detailsJson = JSON.stringify(details); } catch { detailsJson = null; }
   }
-  await db.prepare(`INSERT INTO audit_log(user_id, user_email, action, entity_type, entity_id, summary, details)
-              VALUES(?, ?, ?, ?, ?, ?, ?)`)
-    .run(actorUserId, actorEmail || null, action, entityType, entityId == null ? null : String(entityId), summary, detailsJson);
+  try {
+    await db.prepare(`INSERT INTO audit_log(user_id, user_email, action, entity_type, entity_id, summary, details)
+                VALUES(?, ?, ?, ?, ?, ?, ?)`)
+      .run(actorUserId, actorEmail || null, action, entityType, entityId == null ? null : String(entityId), summary, detailsJson);
+  } catch (err) {
+    console.warn('[audit] log mislukt:', err?.message || err);
+  }
 }
 
 async function logAuditFromReq(req, payload) {
@@ -5125,7 +5137,8 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER', 'ADMIN'), async (
 
 async function saveCatalogProducts(nextProducts, beforeConfig) {
   const before = beforeConfig || await getConfig();
-  const sanitized = sanitizeProducts(Array.isArray(nextProducts) ? nextProducts : []);
+  const coalesced = coalesceProductsPosterPaths(Array.isArray(nextProducts) ? nextProducts : []);
+  const sanitized = sanitizeProducts(coalesced);
   const posterGaps = validateProductsPosterPolicy(sanitized);
   if (posterGaps.length) {
     const err = new Error('3D-producten in de shop vereisen een poster. Upload of genereer een poster per product.');

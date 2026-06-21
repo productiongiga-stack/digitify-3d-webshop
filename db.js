@@ -236,6 +236,21 @@ async function activateMemoryFallback(err) {
   await ensureConfig();
 }
 
+async function ensureUploadBlobsTable() {
+  if (!USE_PG) return;
+  await db.exec(`
+CREATE TABLE IF NOT EXISTS upload_blobs (
+  path TEXT PRIMARY KEY,
+  mime_type TEXT NOT NULL,
+  data BYTEA NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_upload_blobs_updated_at ON upload_blobs(updated_at);
+  `);
+}
+
 // ── Schema init ───────────────────────────────────────────────────────────────
 async function initDatabase() {
   if (IS_VERCEL && !USE_PG) {
@@ -247,11 +262,15 @@ async function initDatabase() {
     try {
       await db.prepare('SELECT 1 AS ok').get();
     } catch (err) {
-      if (IS_VERCEL) {
-        await activateMemoryFallback(err);
-        return;
-      }
-      throw err;
+      console.error('[db] PostgreSQL bereikbaarheid mislukt:', err?.message || err);
+      if (IS_VERCEL) throw err;
+      await activateMemoryFallback(err);
+      return;
+    }
+    try {
+      await ensureUploadBlobsTable();
+    } catch (err) {
+      console.warn('[db] upload_blobs tabel kon niet worden aangemaakt:', err?.message || err);
     }
     const runPgMigrations = String(process.env.PG_AUTO_INIT_SCHEMA || '').toLowerCase() === 'true';
     if (!runPgMigrations) return;
@@ -290,11 +309,8 @@ CREATE INDEX IF NOT EXISTS idx_upload_blobs_updated_at ON upload_blobs(updated_a
       await ensurePgRuntimeSchemaCompat();
       await ensureAuditLogSchemaCompat();
     } catch (err) {
-      if (IS_VERCEL) {
-        await activateMemoryFallback(err);
-        return;
-      }
-      throw err;
+      console.warn('[db] PG schema init gedeeltelijk mislukt:', err?.message || err);
+      if (!IS_VERCEL) throw err;
     }
   } else {
     // SQLite schema (inline, same as original db.js)
