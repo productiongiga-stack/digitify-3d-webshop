@@ -40,6 +40,7 @@ const {
 const { collectProductsWarnings } = require('./lib/product-warnings');
 const { securityHeadersMiddleware } = require('./lib/security-headers');
 const { mirrorPublicAssetIfConfigured, getAssetCdnBase } = require('./lib/asset-storage');
+const { backfillPublicAssetsToBlob } = require('./lib/backfill-blob-cdn');
 const { buildPublicConfigPayload } = require('./lib/public-config');
 const { getUploadPlatformLimits } = require('./lib/direct-upload-limit');
 const { handleProductMockupUpload, isImageUpload } = require('./lib/product-mockup-upload');
@@ -214,6 +215,7 @@ async function boot() {
       console.log('========================================\n');
     }
     await getConfig();
+    await maybeBackfillBlobCdnOnce();
     _booted = true;
   })();
   try {
@@ -221,6 +223,25 @@ async function boot() {
   } catch (err) {
     _bootPromise = null;
     throw err;
+  }
+}
+
+async function maybeBackfillBlobCdnOnce() {
+  if (process.env.BLOB_BACKFILL_ON_BOOT !== '1' || !process.env.BLOB_READ_WRITE_TOKEN) return;
+  try {
+    const done = await getSetting('ops_blob_backfill_v1');
+    if (done) return;
+    const result = await backfillPublicAssetsToBlob({
+      db,
+      publicDir: PUBLIC_DIR,
+      readStoredUpload
+    });
+    if (result.mirrored > 0 || result.total === 0) {
+      await setSetting('ops_blob_backfill_v1', { at: new Date().toISOString(), ...result });
+    }
+    console.log('[blob-backfill]', result);
+  } catch (err) {
+    console.warn('[blob-backfill] mislukt:', err?.message || err);
   }
 }
 
@@ -5654,6 +5675,24 @@ app.get('/api/admin/config/stripe/test', requireAuth, requireRole('OWNER'), asyn
     res.json({ ok: true, connected: true });
   } catch (err) {
     res.status(400).json({ error: `Stripe verbindingstest mislukt: ${err.message}` });
+  }
+});
+
+app.post('/api/admin/ops/backfill-blob-cdn', requireAuth, requireRole('OWNER'), async (req, res) => {
+  try {
+    const dryRun = String(req.query.dryRun || req.body?.dryRun || '').trim() === '1';
+    const result = await backfillPublicAssetsToBlob({
+      db,
+      publicDir: PUBLIC_DIR,
+      readStoredUpload,
+      dryRun
+    });
+    if (!dryRun && result.mirrored > 0) {
+      await setSetting('ops_blob_backfill_v1', { at: new Date().toISOString(), ...result });
+    }
+    res.json({ ok: result.failed === 0, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Blob backfill mislukt' });
   }
 });
 
