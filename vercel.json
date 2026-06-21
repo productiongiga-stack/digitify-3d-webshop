@@ -33,6 +33,13 @@
       "dest": "/api/index.js"
     },
     {
+      "src": "/assets/products/digitify/(.+\\.(png|jpg|jpeg|gif|webp|svg|glb|ico|map))",
+      "dest": "/public/assets/products/digitify/$1",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
       "src": "/assets/(branding|products)/(.*)",
       "dest": "/api/index.js"
     },

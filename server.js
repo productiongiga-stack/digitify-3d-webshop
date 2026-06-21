@@ -39,7 +39,7 @@ const {
 } = dbModule;
 const { collectProductsWarnings } = require('./lib/product-warnings');
 const { securityHeadersMiddleware } = require('./lib/security-headers');
-const { mirrorPublicAssetIfConfigured, getAssetCdnBase } = require('./lib/asset-storage');
+const { mirrorPublicAssetIfConfigured, getAssetCdnBase, resolvePublicAssetUrl } = require('./lib/asset-storage');
 const { backfillPublicAssetsToBlob } = require('./lib/backfill-blob-cdn');
 const { buildPublicConfigPayload } = require('./lib/public-config');
 const { getUploadPlatformLimits } = require('./lib/direct-upload-limit');
@@ -1293,7 +1293,29 @@ function replaceHeadTag(html, matcher, replacement) {
   return matcher.test(html) ? html.replace(matcher, replacement) : html;
 }
 
+function buildHomePreloadTags(config) {
+  const products = Array.isArray(config?.products) ? config.products.filter(p => p && p.enabled !== false) : [];
+  const featured = products.find(p => p.isFeatured) || products.find(p => p.isDefault) || products[0] || null;
+  if (!featured) return '';
+  const tags = [];
+  const posterPath = featured.model3d?.posterPath || featured.mockupPath;
+  if (posterPath) {
+    const posterUrl = resolvePublicAssetUrl(posterPath, APP_BASE_URL) || absoluteUrlForAsset(posterPath);
+    tags.push(`<link rel="preload" as="image" href="${htmlEscape(posterUrl)}">`);
+  }
+  const modelPath = String(featured.model3d?.modelPath || '').trim();
+  if (/\.glb$/i.test(modelPath)) {
+    const modelUrl = resolvePublicAssetUrl(modelPath, APP_BASE_URL) || absoluteUrlForAsset(modelPath);
+    tags.push(`<link rel="preload" as="fetch" href="${htmlEscape(modelUrl)}" crossorigin="anonymous">`);
+  }
+  return tags.length ? `${tags.join('\n  ')}\n` : '';
+}
+
 function renderIndexWithSeo(config) {
+  const cached = pageHtmlCache.get(INDEX_HTML_PATH);
+  if (cached && (Date.now() - cached.at) < dbModule.CONFIG_CACHE_TTL_MS) {
+    return cached.html;
+  }
   let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
   const seo = buildSeoPayload(config);
   html = replaceHeadTag(html, /<title>[\s\S]*?<\/title>/i, `<title>${htmlEscape(seo.title)}</title>`);
@@ -1311,6 +1333,10 @@ function renderIndexWithSeo(config) {
     html = html.replace('</head>', `  <link rel="canonical" href="${htmlEscape(seo.pageUrl)}">\n</head>`);
   }
   html = replaceHeadTag(html, /<script[^>]*id="seoJsonLd"[^>]*>[\s\S]*?<\/script>/i, jsonLdScriptTag(seo.jsonLd));
+  const preloadTags = buildHomePreloadTags(config);
+  if (preloadTags) {
+    html = html.replace('</head>', `  ${preloadTags}</head>`);
+  }
   const safeConfig = buildPublicConfigPayload(config, APP_BASE_URL);
   const configJson = JSON.stringify(safeConfig).replace(/</g, '\\u003c');
   const configScript = `<script>window.NEB_CONFIG=${configJson};</script>`;

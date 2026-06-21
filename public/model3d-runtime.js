@@ -519,19 +519,35 @@ function settleLoadedRoot(loaderFn, finalize, { deferFinish = false } = {}) {
   });
 }
 
-async function loadGltf(manifest, assetUrl) {
+const loadedGltfSceneCache = new Map();
+const loadingGltfScenePromises = new Map();
+
+function cloneLoadedScene(root) {
+  return root?.clone ? root.clone(true) : root;
+}
+
+async function fetchGltfScene(manifest, assetUrl) {
   const modelUrl = assetUrl(manifest.modelPath);
+  const cached = loadedGltfSceneCache.get(modelUrl);
+  if (cached) return cloneLoadedScene(cached);
+  if (loadingGltfScenePromises.has(modelUrl)) {
+    const shared = await loadingGltfScenePromises.get(modelUrl);
+    return cloneLoadedScene(shared);
+  }
+
   const modelPathLower = String(manifest.modelPath || '').trim().toLowerCase();
   const isBinaryGlb = modelPathLower.endsWith('.glb');
   const resourcePath = isBinaryGlb ? '' : resolveModelResourcePath(manifest, modelUrl);
   const label = manifest.modelPath.split('/').pop() || 'model';
-  return new Promise((resolve, reject) => {
+
+  const loadPromise = new Promise((resolve, reject) => {
     let gltfScene = null;
     const manager = new THREE.LoadingManager(
       () => {
         if (!gltfScene) return;
         try {
           finalizeLoadedMaterials(gltfScene);
+          loadedGltfSceneCache.set(modelUrl, gltfScene);
           resolve(gltfScene);
         } catch (err) {
           reject(err);
@@ -549,7 +565,17 @@ async function loadGltf(manifest, assetUrl) {
       undefined,
       (err) => reject(new Error(err?.message || `Kon GLB/GLTF niet laden (${label})`))
     );
+  }).finally(() => {
+    loadingGltfScenePromises.delete(modelUrl);
   });
+
+  loadingGltfScenePromises.set(modelUrl, loadPromise);
+  const shared = await loadPromise;
+  return cloneLoadedScene(shared);
+}
+
+async function loadGltf(manifest, assetUrl) {
+  return fetchGltfScene(manifest, assetUrl);
 }
 
 async function loadObj(manifest, assetUrl) {

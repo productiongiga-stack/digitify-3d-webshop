@@ -122,6 +122,15 @@
     document.head.appendChild(preconnect);
   }
 
+  if (!document.getElementById('digitifyThreePreload')) {
+    var threePreload = document.createElement('link');
+    threePreload.id = 'digitifyThreePreload';
+    threePreload.rel = 'modulepreload';
+    threePreload.href = 'https://esm.sh/three@0.170.0';
+    threePreload.crossOrigin = 'anonymous';
+    document.head.appendChild(threePreload);
+  }
+
   if (!document.getElementById('digitifyHeaderDeckCss')) {
     var link = document.createElement('link');
     link.id = 'digitifyHeaderDeckCss';

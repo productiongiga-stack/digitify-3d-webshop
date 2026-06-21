@@ -478,7 +478,7 @@
           return;
         }
         document.addEventListener('digitify:storefront-ready', resolve, { once: true });
-        window.setTimeout(resolve, hasEmbeddedCatalog ? 900 : 2200);
+        window.setTimeout(resolve, hasEmbeddedCatalog ? 420 : 2200);
       });
     }
 
