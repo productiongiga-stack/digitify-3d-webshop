@@ -518,11 +518,20 @@ function resetSelectionPreviewView() {
 
 function fitSelectionCameraToModel(displayModel) {
   fitPerspectiveCameraToModel(state.selectionPreview.camera, displayModel, {
-    margin: 1.04,
+    margin: 1.1,
     yLift: 0.018
   });
   syncSelectionViewFromCamera();
   applySelectionViewZoom();
+}
+
+function revealSelectionPreview3d() {
+  return new Promise((resolve) => {
+    resizeSelectionPreview();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resolve);
+    });
+  });
 }
 
 function setupSelectionPreviewInteraction() {
@@ -611,10 +620,11 @@ async function enableSelectionPreview3d(product) {
 
   state.selectionPreview3dEnabled = true;
   if (cached) {
+    setSelectionStageMediaMode('loading');
+    await revealSelectionPreview3d();
     setSelectionStageMediaMode('3d');
     if (wrap) wrap.dataset.previewMode = '3d';
     if (eyebrow) eyebrow.textContent = '3D voorbeeld';
-    resizeSelectionPreview();
     sp.renderer?.render(sp.scene, sp.camera);
     syncSelection3dToggleUi();
     ensureAnimateLoop();
@@ -622,7 +632,7 @@ async function enableSelectionPreview3d(product) {
   }
 
   setSelection3dLoader(true);
-  setSelectionStageMediaMode('2d');
+  setSelectionStageMediaMode('loading');
   const token = Symbol('selection-preview');
   sp.loadToken = token;
   clearSelectionPreviewModel();
@@ -655,11 +665,11 @@ async function enableSelectionPreview3d(product) {
       displayModel,
       manifest
     );
+    await revealSelectionPreview3d();
+    sp.renderer.render(sp.scene, sp.camera);
     setSelectionStageMediaMode('3d');
     if (wrap) wrap.dataset.previewMode = '3d';
     if (eyebrow) eyebrow.textContent = '3D voorbeeld';
-    resizeSelectionPreview();
-    sp.renderer.render(sp.scene, sp.camera);
     ensureAnimateLoop();
   } catch (err) {
     console.warn('Selectie-3D laden mislukt:', err);
@@ -702,13 +712,18 @@ function prepareSelectionPreview(product) {
 
   const has3d = hasProductModel3d(product);
   const posterUrl = productPreviewPoster(product);
-  poster.src = posterUrl || '';
   poster.alt = product.name || 'Product';
   poster.hidden = !posterUrl;
   const posterLayer = poster.closest('.storefront-media-layer--2d');
   posterLayer?.classList.add('digitify-media-stage');
-  if (posterUrl) NEB.wireMediaImage(poster);
-  else posterLayer?.classList.add('is-media-loading');
+  posterLayer?.classList.remove('is-media-loading');
+  if (posterUrl) {
+    poster.src = posterUrl;
+    NEB.wireMediaImage(poster);
+  } else {
+    poster.removeAttribute('src');
+    posterLayer?.classList.add('is-media-loading');
+  }
   if (label) label.textContent = product.name || 'Product';
   if (eyebrow) eyebrow.textContent = has3d ? 'Productafbeelding' : 'Productafbeelding';
   wrap.dataset.previewMode = '2d';
