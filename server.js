@@ -39,7 +39,8 @@ const {
 } = dbModule;
 const { collectProductsWarnings } = require('./lib/product-warnings');
 const { securityHeadersMiddleware } = require('./lib/security-headers');
-const { mirrorPublicAssetIfConfigured, getPlatformAssetMeta } = require('./lib/asset-storage');
+const { mirrorPublicAssetIfConfigured } = require('./lib/asset-storage');
+const { buildPublicConfigPayload } = require('./lib/public-config');
 const { getUploadPlatformLimits } = require('./lib/direct-upload-limit');
 const { handleProductMockupUpload, isImageUpload } = require('./lib/product-mockup-upload');
 const { validateProductsPosterPolicy, coalesceProductsPosterPaths, syncStoreMockupToModel3dPoster } = require('./lib/product-poster-policy');
@@ -63,6 +64,49 @@ const STORAGE_ROOT = USE_WRITABLE_TMP ? '/tmp' : ROOT;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const INDEX_HTML_PATH = path.join(PUBLIC_DIR, 'index.html');
 const DESIGNER_HTML_PATH = path.join(PUBLIC_DIR, 'designer.html');
+const pageHtmlCache = new Map();
+let publicConfigJsonCache = null;
+let publicConfigJsonCacheAt = 0;
+
+function invalidateRenderedPageCaches() {
+  pageHtmlCache.clear();
+  publicConfigJsonCache = null;
+  publicConfigJsonCacheAt = 0;
+}
+
+dbModule.setConfigCacheInvalidationHook(invalidateRenderedPageCaches);
+
+function renderHtmlWithEmbeddedConfig(htmlPath, config) {
+  const cacheKey = htmlPath;
+  const cached = pageHtmlCache.get(cacheKey);
+  if (cached && (Date.now() - cached.at) < dbModule.CONFIG_CACHE_TTL_MS) {
+    return cached.html;
+  }
+  let html = fs.readFileSync(htmlPath, 'utf8');
+  if (!/window\.NEB_CONFIG\s*=/.test(html)) {
+    const configJson = JSON.stringify(buildPublicConfigPayload(config, APP_BASE_URL)).replace(/</g, '\\u003c');
+    const configScript = `<script>window.NEB_CONFIG=${configJson};</script>`;
+    if (html.includes('digitify-shell-boot.js')) {
+      html = html.replace('<script src="digitify-shell-boot.js', `${configScript}\n  <script src="digitify-shell-boot.js`);
+      html = html.replace('<script src="/digitify-shell-boot.js', `${configScript}\n  <script src="/digitify-shell-boot.js`);
+    } else {
+      html = html.replace(/<head([^>]*)>/i, `<head$1>\n  ${configScript}`);
+    }
+  }
+  pageHtmlCache.set(cacheKey, { html, at: Date.now() });
+  return html;
+}
+
+async function getPublicConfigPayload() {
+  const now = Date.now();
+  if (publicConfigJsonCache && (now - publicConfigJsonCacheAt) < dbModule.CONFIG_CACHE_TTL_MS) {
+    return publicConfigJsonCache;
+  }
+  const cfg = await getConfig();
+  publicConfigJsonCache = buildPublicConfigPayload(cfg, APP_BASE_URL);
+  publicConfigJsonCacheAt = now;
+  return publicConfigJsonCache;
+}
 const BRAND_ASSET_DIR = USE_WRITABLE_TMP
   ? path.join(STORAGE_ROOT, 'uploads', 'assets', 'branding')
   : path.join(PUBLIC_DIR, 'assets', 'branding');
@@ -169,6 +213,7 @@ async function boot() {
       console.log(' Wijzig dit wachtwoord direct na eerste login (/account)');
       console.log('========================================\n');
     }
+    await getConfig();
     _booted = true;
   })();
   try {
@@ -1227,19 +1272,6 @@ function replaceHeadTag(html, matcher, replacement) {
   return matcher.test(html) ? html.replace(matcher, replacement) : html;
 }
 
-function buildPublicConfigPayload(cfg = {}) {
-  const safe = { ...cfg };
-  if (safe.smtp) safe.smtp = { ...safe.smtp, pass: undefined, user: undefined };
-  const platform = getPlatformAssetMeta(APP_BASE_URL);
-  safe.platform = {
-    assetCdnBase: platform.assetCdnBase,
-    assetStorage: platform.assetStorage,
-    assetUrlMode: platform.assetUrlMode,
-    ...getUploadPlatformLimits()
-  };
-  return safe;
-}
-
 function renderIndexWithSeo(config) {
   let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
   const seo = buildSeoPayload(config);
@@ -1258,9 +1290,15 @@ function renderIndexWithSeo(config) {
     html = html.replace('</head>', `  <link rel="canonical" href="${htmlEscape(seo.pageUrl)}">\n</head>`);
   }
   html = replaceHeadTag(html, /<script[^>]*id="seoJsonLd"[^>]*>[\s\S]*?<\/script>/i, jsonLdScriptTag(seo.jsonLd));
-  const safeConfig = buildPublicConfigPayload(config);
+  const safeConfig = buildPublicConfigPayload(config, APP_BASE_URL);
   const configJson = JSON.stringify(safeConfig).replace(/</g, '\\u003c');
-  html = html.replace('</head>', `  <script>window.NEB_CONFIG=${configJson};</script>\n</head>`);
+  const configScript = `<script>window.NEB_CONFIG=${configJson};</script>`;
+  if (html.includes('digitify-shell-boot.js')) {
+    html = html.replace('<script src="digitify-shell-boot.js', `${configScript}\n  <script src="digitify-shell-boot.js`);
+  } else {
+    html = html.replace('</head>', `  ${configScript}\n</head>`);
+  }
+  pageHtmlCache.set(INDEX_HTML_PATH, { html, at: Date.now() });
   return html;
 }
 
@@ -5238,7 +5276,12 @@ app.put('/api/admin/products/:productId', requireAuth, requireRole('OWNER', 'ADM
 });
 
 registerClientLogRoutes(app, { requireAuth, requireRole });
-registerPublicConfigRoutes(app, { getConfig, resolveAppBaseUrl: getAppBaseUrl });
+registerPublicConfigRoutes(app, {
+  getPublicConfigPayload,
+  getConfig,
+  resolveAppBaseUrl: getAppBaseUrl,
+  configCacheTtlMs: dbModule.CONFIG_CACHE_TTL_MS
+});
 registerProduct3dRoutes(app, {
   requireAuth,
   requireRole,
@@ -5822,16 +5865,12 @@ app.get('/assets/*', async (req, res, next) => {
 app.get('/', async (_req, res) => {
   try {
     const cfg = await getConfig();
-    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=60');
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
     res.type('html').send(renderIndexWithSeo(cfg));
   } catch (err) {
     console.error('SEO render fallback naar statische index:', err?.message || err);
     res.sendFile(INDEX_HTML_PATH);
   }
-});
-
-app.get('/designer', async (_req, res) => {
-  res.sendFile(DESIGNER_HTML_PATH);
 });
 
 const SHOP_CORS_ORIGINS = new Set([
@@ -5866,11 +5905,20 @@ app.use(express.static(PUBLIC_DIR, {
 const pageRoutes = [
   '/login', '/register', '/dashboard', '/admin', '/account', '/cart',
   '/shop', '/prijzen', '/maattabel', '/support', '/faq', '/contact',
-  '/verzending', '/legal', '/privacy', '/voorwaarden', '/retourneren'
+  '/verzending', '/legal', '/privacy', '/voorwaarden', '/retourneren', '/designer'
 ];
-pageRoutes.forEach(route => {
+pageRoutes.forEach((route) => {
   app.get(route, async (_req, res) => {
-    res.sendFile(path.join(ROOT, 'public', route.replace('/', '') + '.html'));
+    const htmlName = `${route.replace('/', '')}.html`;
+    const htmlPath = path.join(PUBLIC_DIR, htmlName);
+    try {
+      const cfg = await getConfig();
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+      res.type('html').send(renderHtmlWithEmbeddedConfig(htmlPath, cfg));
+    } catch (err) {
+      console.error(`HTML render fallback voor ${route}:`, err?.message || err);
+      res.sendFile(htmlPath);
+    }
   });
 });
 

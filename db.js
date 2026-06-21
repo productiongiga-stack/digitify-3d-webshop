@@ -640,26 +640,45 @@ async function decryptSetting(ciphertext) {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
+const settingsCache = new Map();
+let configCacheInvalidationHook = null;
+
+function setConfigCacheInvalidationHook(fn) {
+  configCacheInvalidationHook = typeof fn === 'function' ? fn : null;
+}
+
 async function getSetting(key, fallback = null) {
+  if (settingsCache.has(key)) return settingsCache.get(key);
   const row = await db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   if (!row) return fallback;
-  try { return JSON.parse(row.value); } catch { return row.value; }
+  let val;
+  try { val = JSON.parse(row.value); } catch { val = row.value; }
+  settingsCache.set(key, val);
+  return val;
 }
 
 async function setSetting(key, value) {
   await db.prepare(`INSERT INTO settings(key, value) VALUES(?, ?)
               ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
     .run(key, JSON.stringify(value));
+  let parsed = value;
+  try { parsed = typeof value === 'string' ? JSON.parse(value) : value; } catch { parsed = value; }
+  settingsCache.set(key, parsed);
   if (key === 'config') invalidateConfigCache();
 }
 
 let cachedConfig = null;
 let cachedConfigAt = 0;
-const CONFIG_CACHE_TTL_MS = Math.max(5000, Number(process.env.CONFIG_CACHE_TTL_MS) || 120000);
+const CONFIG_CACHE_TTL_MS = Math.max(
+  5000,
+  Number(process.env.CONFIG_CACHE_TTL_MS) || (process.env.VERCEL ? 300000 : 120000)
+);
 
 function invalidateConfigCache() {
   cachedConfig = null;
   cachedConfigAt = 0;
+  settingsCache.delete('config');
+  if (configCacheInvalidationHook) configCacheInvalidationHook();
 }
 
 // ── Size sorting ──────────────────────────────────────────────────────────────
@@ -1191,6 +1210,7 @@ function sanitizeProducts(products) {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 async function ensureConfig() {
+  if (settingsCache.has('config')) return;
   const existing = await getSetting('config');
   if (existing == null) await setSetting('config', DEFAULT_CONFIG);
 }
@@ -1273,5 +1293,8 @@ module.exports = {
   mergeStoredProductWithDefaults,
   USE_PG,
   get dbDegraded() { return dbDegraded; },
+  invalidateConfigCache,
+  setConfigCacheInvalidationHook,
+  get CONFIG_CACHE_TTL_MS() { return CONFIG_CACHE_TTL_MS; },
   pragma: () => {} // no-op for compat
 };

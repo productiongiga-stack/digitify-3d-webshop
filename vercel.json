@@ -26,7 +26,7 @@
     },
     {
       "src": "/(login|register|dashboard|admin|account|cart|shop|prijzen|maattabel|support|faq|contact|verzending|legal|privacy|voorwaarden|retourneren|designer)",
-      "dest": "/public/$1.html"
+      "dest": "/api/index.js"
     },
     {
       "src": "/",

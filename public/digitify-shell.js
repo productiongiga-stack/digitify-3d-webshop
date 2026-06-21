@@ -471,13 +471,14 @@
     await refreshAuth();
 
     if (document.body.classList.contains('storefront-page')) {
+      const hasEmbeddedCatalog = Array.isArray(window.NEB_CONFIG?.products) && window.NEB_CONFIG.products.length > 0;
       await new Promise((resolve) => {
         if (document.documentElement.classList.contains('digitify-storefront-ready')) {
           resolve();
           return;
         }
         document.addEventListener('digitify:storefront-ready', resolve, { once: true });
-        window.setTimeout(resolve, 2200);
+        window.setTimeout(resolve, hasEmbeddedCatalog ? 900 : 2200);
       });
     }
 
