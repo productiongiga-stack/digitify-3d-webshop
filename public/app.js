@@ -92,6 +92,14 @@ const NEB = (() => {
         let msg = (data && data.error) || `HTTP ${r.status}`;
         if (r.status === 413) {
           msg = 'Bestand te groot voor directe upload. Vernieuw de pagina en upload opnieuw (chunk-upload wordt dan gebruikt).';
+        } else if (r.status === 403) {
+          if (data?.code === 'TWO_FACTOR_SETUP_REQUIRED') {
+            msg = data.error || 'Voltooi eerst 2FA via Account → 2FA.';
+          } else if (typeof data === 'string' && data.trim()) {
+            msg = data.trim().slice(0, 240);
+          } else if (data?.error) {
+            msg = data.error;
+          }
         }
         const err = new Error(msg);
         err.status = r.status;
@@ -115,7 +123,17 @@ const NEB = (() => {
   }
 
   function shouldUseChunkedUpload(file) {
-    return !!(file && file.size > maxDirectUploadBytes());
+    if (!file) return false;
+    const platform = window.NEB_CONFIG?.platform || {};
+    if (platform.chunkedUploadsEnabled && file.size > maxDirectUploadBytes()) return true;
+    return file.size > maxDirectUploadBytes();
+  }
+
+  function preferChunkedAdminUpload(file) {
+    if (!file) return false;
+    const platform = window.NEB_CONFIG?.platform || {};
+    if (platform.chunkedUploadsEnabled) return true;
+    return shouldUseChunkedUpload(file);
   }
 
   async function uploadChunked(file, meta) {
@@ -147,6 +165,7 @@ const NEB = (() => {
     put: (p, body) => json(p, { method: 'PUT', body }),
     del: (p) => json(p, { method: 'DELETE' }),
     shouldUseChunkedUpload,
+    preferChunkedAdminUpload,
     uploadChunked,
 
     me: () => {

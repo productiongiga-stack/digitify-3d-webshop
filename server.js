@@ -40,6 +40,7 @@ const {
 const { collectProductsWarnings } = require('./lib/product-warnings');
 const { securityHeadersMiddleware } = require('./lib/security-headers');
 const { mirrorPublicAssetIfConfigured } = require('./lib/asset-storage');
+const { getUploadPlatformLimits } = require('./lib/direct-upload-limit');
 const { handleProductMockupUpload, isImageUpload } = require('./lib/product-mockup-upload');
 const { validateProductsPosterPolicy, coalesceProductsPosterPaths } = require('./lib/product-poster-policy');
 const { captureServerError } = require('./lib/observability');
@@ -215,9 +216,17 @@ async function requireAuth(req, res, next) {
       '/api/me/2fa/status',
       '/api/me/2fa/setup',
       '/api/me/2fa/enable',
-      '/api/me/2fa/disable'
+      '/api/me/2fa/disable',
+      '/api/admin/config',
+      '/api/admin/products/mockup',
+      '/api/admin/uploads/chunk',
+      '/api/admin/products/3d-assets'
     ]);
-    if (!allowlist.has(req.path)) {
+    const path = String(req.path || '');
+    const allowed = allowlist.has(path)
+      || path.startsWith('/api/admin/products/')
+      || path.startsWith('/api/admin/uploads/');
+    if (!allowed) {
       return res.status(403).json({
         error: '2FA setup is verplicht voor admin-accounts. Rond dit eerst af via /account.',
         code: 'TWO_FACTOR_SETUP_REQUIRED'
@@ -4875,7 +4884,12 @@ function toAdminConfigPayload(cfg = {}) {
 
 app.get('/api/admin/config', requireAuth, requireRole('OWNER', 'ADMIN'), async (_req, res) => {
   const cfg = await getConfig();
-  res.json(toAdminConfigPayload(cfg));
+  const payload = toAdminConfigPayload(cfg);
+  payload.platform = {
+    ...(payload.platform || {}),
+    ...getUploadPlatformLimits()
+  };
+  res.json(payload);
 });
 
 app.put('/api/admin/config', requireAuth, requireRole('OWNER', 'ADMIN'), async (req, res) => {
@@ -5234,7 +5248,7 @@ registerAdminOrdersBulkRoutes(app, {
   handleBulkSoftDeleteOrders
 });
 
-app.post('/api/admin/branding/upload', requireAuth, requireRole('OWNER'), brandingUpload.single('asset'), async (req, res) => {
+app.post('/api/admin/branding/upload', requireAuth, requireRole('OWNER', 'ADMIN'), brandingUpload.single('asset'), async (req, res) => {
   const kindRaw = String(req.body?.kind || '').trim().toLowerCase();
   const kind = kindRaw === 'favicon' ? 'favicon' : kindRaw === 'logo' ? 'logo' : '';
   if (!kind) return res.status(400).json({ error: 'Upload type ongeldig (logo of favicon)' });

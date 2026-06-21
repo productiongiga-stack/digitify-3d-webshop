@@ -126,12 +126,13 @@ function escText(v) {
 
 async function uploadProductMockupFile(file) {
   if (!file) throw new Error('Geen bestand geselecteerd');
-  if (NEB.shouldUseChunkedUpload?.(file)) {
-    return NEB.uploadChunked(file, {
-      kind: 'productMockup',
-      filename: file.name,
-      mimetype: file.type || ''
-    });
+  const meta = {
+    kind: 'productMockup',
+    filename: file.name,
+    mimetype: file.type || 'application/octet-stream'
+  };
+  if (NEB.preferChunkedAdminUpload?.(file) || NEB.shouldUseChunkedUpload?.(file)) {
+    return NEB.uploadChunked(file, meta);
   }
   const form = new FormData();
   form.append('mockup', file, file.name);
@@ -4022,15 +4023,16 @@ function bindProduct3dUploadGrid(modal, ctx = {}) {
   const post3dAssetFile = async (file, fieldName) => {
     const productId = getPm3dProductId(modal);
     const resourceDir = getPm3dResourceDir(modal) || '';
-    if (NEB.shouldUseChunkedUpload?.(file)) {
-      return NEB.uploadChunked(file, {
-        kind: 'product3d',
-        field: fieldName,
-        productId,
-        resourceDir,
-        filename: file.name,
-        mimetype: file.type || ''
-      });
+    const meta = {
+      kind: 'product3d',
+      field: fieldName,
+      productId,
+      resourceDir,
+      filename: file.name,
+      mimetype: file.type || 'application/octet-stream'
+    };
+    if (NEB.preferChunkedAdminUpload?.(file) || NEB.shouldUseChunkedUpload?.(file)) {
+      return NEB.uploadChunked(file, meta);
     }
     const form = new FormData();
     appendPm3dFormContext(form);
@@ -4106,7 +4108,7 @@ function bindProduct3dUploadGrid(modal, ctx = {}) {
   const upload3dResources = async (input, button) => {
     const files = [...(input?.files || [])];
     if (!files.length) return;
-    const needsChunk = files.some((f) => NEB.shouldUseChunkedUpload?.(f));
+    const needsChunk = files.some((f) => NEB.preferChunkedAdminUpload?.(f) || NEB.shouldUseChunkedUpload?.(f));
     try {
       if (button) { button.disabled = true; button.textContent = 'Upload...'; }
       let lastOut = null;
