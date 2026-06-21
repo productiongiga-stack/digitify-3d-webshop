@@ -58,10 +58,31 @@
   }
 
   if (!window.__NEB_CONFIG_PROMISE && !window.NEB_CONFIG) {
+    try {
+      var cachedRaw = sessionStorage.getItem('neb_public_config_v1');
+      if (cachedRaw) {
+        var cached = JSON.parse(cachedRaw);
+        if (cached && cached.data && cached.ts && (Date.now() - cached.ts) < 120000) {
+          window.NEB_CONFIG = cached.data;
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (!window.__NEB_CONFIG_PROMISE && !window.NEB_CONFIG) {
     window.__NEB_CONFIG_PROMISE = fetch('/api/config', { credentials: 'same-origin' })
       .then(function (r) {
         if (!r.ok) throw new Error('config');
         return r.json();
+      })
+      .then(function (cfg) {
+        if (cfg && typeof cfg === 'object') {
+          window.NEB_CONFIG = cfg;
+          try {
+            sessionStorage.setItem('neb_public_config_v1', JSON.stringify({ ts: Date.now(), data: cfg }));
+          } catch (_) {}
+        }
+        return cfg;
       })
       .catch(function () { return null; });
   }

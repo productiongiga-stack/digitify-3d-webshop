@@ -39,7 +39,7 @@ const {
 } = dbModule;
 const { collectProductsWarnings } = require('./lib/product-warnings');
 const { securityHeadersMiddleware } = require('./lib/security-headers');
-const { mirrorPublicAssetIfConfigured } = require('./lib/asset-storage');
+const { mirrorPublicAssetIfConfigured, getPlatformAssetMeta } = require('./lib/asset-storage');
 const { getUploadPlatformLimits } = require('./lib/direct-upload-limit');
 const { handleProductMockupUpload, isImageUpload } = require('./lib/product-mockup-upload');
 const { validateProductsPosterPolicy, coalesceProductsPosterPaths, syncStoreMockupToModel3dPoster } = require('./lib/product-poster-policy');
@@ -1227,6 +1227,19 @@ function replaceHeadTag(html, matcher, replacement) {
   return matcher.test(html) ? html.replace(matcher, replacement) : html;
 }
 
+function buildPublicConfigPayload(cfg = {}) {
+  const safe = { ...cfg };
+  if (safe.smtp) safe.smtp = { ...safe.smtp, pass: undefined, user: undefined };
+  const platform = getPlatformAssetMeta(APP_BASE_URL);
+  safe.platform = {
+    assetCdnBase: platform.assetCdnBase,
+    assetStorage: platform.assetStorage,
+    assetUrlMode: platform.assetUrlMode,
+    ...getUploadPlatformLimits()
+  };
+  return safe;
+}
+
 function renderIndexWithSeo(config) {
   let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
   const seo = buildSeoPayload(config);
@@ -1245,6 +1258,9 @@ function renderIndexWithSeo(config) {
     html = html.replace('</head>', `  <link rel="canonical" href="${htmlEscape(seo.pageUrl)}">\n</head>`);
   }
   html = replaceHeadTag(html, /<script[^>]*id="seoJsonLd"[^>]*>[\s\S]*?<\/script>/i, jsonLdScriptTag(seo.jsonLd));
+  const safeConfig = buildPublicConfigPayload(config);
+  const configJson = JSON.stringify(safeConfig).replace(/</g, '\\u003c');
+  html = html.replace('</head>', `  <script>window.NEB_CONFIG=${configJson};</script>\n</head>`);
   return html;
 }
 
@@ -5806,6 +5822,7 @@ app.get('/assets/*', async (req, res, next) => {
 app.get('/', async (_req, res) => {
   try {
     const cfg = await getConfig();
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=60');
     res.type('html').send(renderIndexWithSeo(cfg));
   } catch (err) {
     console.error('SEO render fallback naar statische index:', err?.message || err);

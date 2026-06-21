@@ -36,6 +36,9 @@ const MINI_PREVIEW_HEIGHT = 94;
 const HERO_DOCK_PREVIEW_WIDTH = 72;
 const HERO_DOCK_PREVIEW_HEIGHT = 80;
 const HERO_DOCK_ROTATE_SPEED = 0.48;
+// Extra WebGL contexts (mini cards + dock) exhaust GPU memory and crash mobile browsers.
+const ENABLE_MINI_3D_PREVIEWS = false;
+const ENABLE_DOCK_3D_PREVIEWS = false;
 
 const state = {
   config: null,
@@ -83,7 +86,8 @@ const state = {
   reduceMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false,
   pageVisible: true,
   selectionPreview3dEnabled: false,
-  selectionPreview3dLoading: false
+  selectionPreview3dLoading: false,
+  cartAddInFlight: false
 };
 
 const touchLikeDevice = window.matchMedia?.('(hover: none), (pointer: coarse)')?.matches || false;
@@ -546,6 +550,7 @@ async function enableSelectionPreview3d(product) {
     resizeSelectionPreview();
     sp.renderer?.render(sp.scene, sp.camera);
     syncSelection3dToggleUi();
+    ensureAnimateLoop();
     return;
   }
 
@@ -588,6 +593,7 @@ async function enableSelectionPreview3d(product) {
     if (eyebrow) eyebrow.textContent = '3D voorbeeld';
     resizeSelectionPreview();
     sp.renderer.render(sp.scene, sp.camera);
+    ensureAnimateLoop();
   } catch (err) {
     console.warn('Selectie-3D laden mislukt:', err);
     report3dError(product?.id, 'selection', err);
@@ -675,16 +681,24 @@ function productCardMedia(product) {
 
 function selectProduct(product) {
   if (!product) return;
-  state.selectedProduct = product;
-  const colors = productColors(product);
-  const sizes = productSizes(product);
-  state.selectedColorHex = colors[0]?.hex || '';
-  state.selectedColorName = colors[0]?.name || '';
-  state.selectedSize = sizes[0]?.code || 'M';
-  renderHero();
-  renderOptions();
-  loadHeroModel(product);
-  scheduleSelectionPreview(product);
+  try {
+    state.selectedProduct = product;
+    const colors = productColors(product);
+    const sizes = productSizes(product);
+    state.selectedColorHex = colors[0]?.hex || '';
+    state.selectedColorName = colors[0]?.name || '';
+    state.selectedSize = sizes[0]?.code || 'M';
+    renderHero();
+    renderOptions();
+    loadHeroModel(product).catch((err) => {
+      console.warn('Hero model laden mislukt:', err);
+      report3dError(product?.id, 'hero', err);
+    });
+    scheduleSelectionPreview(product);
+  } catch (err) {
+    console.error('Product selectie mislukt:', err);
+    NEB.toast?.('Product kon niet geladen worden', 'error');
+  }
 }
 
 function renderHero() {
@@ -772,12 +786,17 @@ function renderOptions() {
   }).join('');
 
   const sizes = productSizes(state.selectedProduct);
-  $('#storefrontSize').innerHTML = sizes.map((size) =>
-    `<option value="${escapeHtml(size.code)}" ${size.code === state.selectedSize ? 'selected' : ''}>${escapeHtml(size.label)}</option>`
-  ).join('');
+  const sizeEl = $('#storefrontSize');
+  if (sizeEl) {
+    sizeEl.innerHTML = sizes.map((size) =>
+      `<option value="${escapeHtml(size.code)}" ${size.code === state.selectedSize ? 'selected' : ''}>${escapeHtml(size.label)}</option>`
+    ).join('');
+  }
 
   const colors = productColors(state.selectedProduct);
-  $('#storefrontColors').innerHTML = colors.map((color) => `
+  const colorsEl = $('#storefrontColors');
+  if (!colorsEl) return;
+  colorsEl.innerHTML = colors.map((color) => `
     <button class="storefront-swatch${color.hex === state.selectedColorHex ? ' active' : ''}" type="button" data-color="${escapeHtml(color.hex)}" data-name="${escapeHtml(color.name)}" title="${escapeHtml(color.name)}">
       <span style="background:${escapeHtml(color.hex)}"></span>
     </button>
@@ -821,6 +840,15 @@ function setupThree() {
   state.scene = scene;
   state.camera = camera;
   state.modelGroup = modelGroup;
+  canvas.addEventListener('webglcontextlost', (event) => {
+    event.preventDefault();
+    report3dError(state.activeModel?.productId, 'hero-context-lost', new Error('WebGL context lost'));
+    clearHeroModelGroup();
+    state.activeModel = null;
+    setHeroMediaMode('2d');
+    cancelAnimationFrame(state.frameId);
+    state.frameId = 0;
+  }, false);
   resizeThree();
   const heroStage = document.querySelector('.storefront-hero-stage');
   const heroShowcase = $('#storefrontHeroShowcase');
@@ -839,7 +867,7 @@ function setupThree() {
     if (productsRoot) ro.observe(productsRoot);
   }
   setupHeroPreviewInteraction();
-  animateThree();
+  ensureAnimateLoop();
 }
 
 function setupHeroPreviewInteraction() {
@@ -887,7 +915,21 @@ function resizeThree() {
 }
 
 async function loadHeroModel(product) {
-  if (!state.renderer) setupThree();
+  try {
+    if (!state.renderer) setupThree();
+  } catch (err) {
+    console.warn('Hero 3D renderer kon niet starten:', err);
+    report3dError(product?.id, 'hero-setup', err);
+    const poster = productPreviewPoster(product);
+    const posterEl = $('#hero3dPoster');
+    if (posterEl && poster) {
+      posterEl.hidden = false;
+      posterEl.src = poster;
+      posterEl.alt = product?.name || 'Product';
+    }
+    setHeroMediaMode('2d');
+    return;
+  }
   const token = Symbol('model-load');
   state.loadingToken = token;
   const manifest = modelManifest(product);
@@ -940,6 +982,7 @@ async function loadHeroModel(product) {
     resizeThree();
     if (state.modelGroup?.children?.[0]) fitHeroCameraToModel(state.modelGroup.children[0], manifest);
     state.renderer.render(state.scene, state.camera);
+    ensureAnimateLoop();
   } catch (err) {
     console.warn('3D model laden mislukt:', err);
     report3dError(product?.id, 'hero', err);
@@ -1091,6 +1134,7 @@ function updateMiniPreviewMediaClass(productId) {
 }
 
 async function ensureMiniPreview(product) {
+  if (!ENABLE_MINI_3D_PREVIEWS) return null;
   const productId = String(product.id || '');
   if (!productId || !hasProductModel3d(product)) return null;
 
@@ -1173,6 +1217,10 @@ async function ensureMiniPreview(product) {
 }
 
 async function setMiniPreviewLive(productId, live) {
+  if (!ENABLE_MINI_3D_PREVIEWS) {
+    updateMiniPreviewMediaClass(productId);
+    return;
+  }
   const id = String(productId || '');
   if (prefersMobilePosterOnly) {
     const card = document.querySelector(`#storefrontProducts [data-product-id="${CSS.escape(id)}"]`);
@@ -1326,6 +1374,7 @@ function updateHeroDockMediaClass(productId) {
 }
 
 async function ensureHeroDockPreview(product) {
+  if (!ENABLE_DOCK_3D_PREVIEWS) return null;
   const productId = String(product.id || '');
   if (!productId || !hasProductModel3d(product)) return null;
 
@@ -1417,6 +1466,10 @@ async function ensureHeroDockPreview(product) {
 }
 
 async function setHeroDockPreviewLive(productId, live) {
+  if (!ENABLE_DOCK_3D_PREVIEWS) {
+    updateHeroDockMediaClass(productId);
+    return;
+  }
   const id = String(productId || '');
   const product = state.products.find((p) => String(p.id) === id);
   if (!product || !hasProductModel3d(product)) {
@@ -1492,6 +1545,10 @@ function releaseInactiveHeroDockPreviews(selectedId) {
 function syncHeroDockPreviews(items) {
   const list = items || productsWith3d();
   const selectedId = String(state.selectedProduct?.id || '');
+  if (!ENABLE_DOCK_3D_PREVIEWS) {
+    releaseInactiveHeroDockPreviews('');
+    return;
+  }
   releaseInactiveHeroDockPreviews(selectedId);
   list.forEach((product) => {
     const id = String(product.id || '');
@@ -1545,12 +1602,36 @@ function renderHero3dDockInner() {
   NEB.wireMediaImages(track);
 }
 
+function needsRenderLoop() {
+  if (!state.pageVisible) return false;
+  const heroMode = document.querySelector('.storefront-hero-stage')?.dataset?.mediaMode;
+  if (heroMode === '3d' && state.renderer && state.modelGroup?.children?.length) return true;
+  const selectionMode = $('#storefrontSelectionStage')?.dataset?.mediaMode;
+  const sp = state.selectionPreview;
+  if (selectionMode === '3d' && sp.renderer && sp.modelGroup?.children?.length) return true;
+  if (ENABLE_MINI_3D_PREVIEWS) {
+    for (const entry of state.miniPreviews.values()) {
+      if (entry.active && entry.ready && state.miniVisible.has(entry.productId)) return true;
+    }
+  }
+  if (ENABLE_DOCK_3D_PREVIEWS) {
+    for (const entry of state.heroDockPreviews.values()) {
+      if (entry.active && entry.ready) return true;
+    }
+  }
+  return false;
+}
+
+function ensureAnimateLoop() {
+  if (!state.frameId && needsRenderLoop()) animateThree();
+}
+
 function animateThree(timestamp = performance.now()) {
+  state.frameId = 0;
+  if (!needsRenderLoop()) return;
   state.frameId = requestAnimationFrame(animateThree);
   const delta = Math.min(0.05, Math.max(0.001, (timestamp - (state.lastFrameTime || timestamp)) / 1000));
   state.lastFrameTime = timestamp;
-
-  if (!state.pageVisible) return;
 
   const heroMode = document.querySelector('.storefront-hero-stage')?.dataset?.mediaMode;
   if (heroMode === '3d' && state.renderer && state.scene && state.camera && state.modelGroup?.children?.length) {
@@ -1583,22 +1664,26 @@ function animateThree(timestamp = performance.now()) {
     sp.renderer.render(sp.scene, sp.camera);
   }
 
-  state.miniPreviews.forEach((entry) => {
-    if (!entry.active || !entry.ready || !entry.renderer || !entry.modelGroup) return;
-    if (!state.miniVisible.has(entry.productId)) return;
-    if (!state.reduceMotion) {
-      entry.modelGroup.rotation.y += MINI_PREVIEW_ROTATE_SPEED * delta;
-    }
-    entry.renderer.render(entry.scene, entry.camera);
-  });
+  if (ENABLE_MINI_3D_PREVIEWS) {
+    state.miniPreviews.forEach((entry) => {
+      if (!entry.active || !entry.ready || !entry.renderer || !entry.modelGroup) return;
+      if (!state.miniVisible.has(entry.productId)) return;
+      if (!state.reduceMotion) {
+        entry.modelGroup.rotation.y += MINI_PREVIEW_ROTATE_SPEED * delta;
+      }
+      entry.renderer.render(entry.scene, entry.camera);
+    });
+  }
 
-  state.heroDockPreviews.forEach((entry) => {
-    if (!entry.active || !entry.ready || !entry.renderer || !entry.modelGroup) return;
-    if (!state.reduceMotion) {
-      entry.modelGroup.rotation.y += HERO_DOCK_ROTATE_SPEED * delta;
-    }
-    entry.renderer.render(entry.scene, entry.camera);
-  });
+  if (ENABLE_DOCK_3D_PREVIEWS) {
+    state.heroDockPreviews.forEach((entry) => {
+      if (!entry.active || !entry.ready || !entry.renderer || !entry.modelGroup) return;
+      if (!state.reduceMotion) {
+        entry.modelGroup.rotation.y += HERO_DOCK_ROTATE_SPEED * delta;
+      }
+      entry.renderer.render(entry.scene, entry.camera);
+    });
+  }
 }
 
 function clearStorefrontFieldErrors() {
@@ -1638,6 +1723,7 @@ function validateStorefrontSelection() {
 }
 
 async function addSelectedToCart() {
+  if (state.cartAddInFlight) return;
   const product = state.selectedProduct;
   if (!product) return;
   if (!validateStorefrontSelection()) return;
@@ -1653,6 +1739,8 @@ async function addSelectedToCart() {
   const qty = Math.max(1, Math.min(99, Number($('#storefrontQty')?.value || 1) || 1));
   const button = document.activeElement?.matches?.('button') ? document.activeElement : $('#storefrontAddToCart');
   const oldText = button?.textContent || '';
+  let redirecting = false;
+  state.cartAddInFlight = true;
   try {
     if (button) { button.disabled = true; button.textContent = 'Toevoegen...'; }
     await NEB.post('/api/cart/product', {
@@ -1670,16 +1758,22 @@ async function addSelectedToCart() {
       NEB.toast('Product toegevoegd. Ga verder winkelen of open je winkelmand.', 'success');
     } else {
       NEB.toast('Product toegevoegd aan winkelmand', 'success');
+      redirecting = true;
       window.location.href = '/cart';
+      return;
     }
   } catch (err) {
     if (err.status === 401) {
+      redirecting = true;
       window.location.href = '/login';
       return;
     }
     NEB.toast(err.message || 'Toevoegen mislukt', 'error');
   } finally {
-    if (button) { button.disabled = false; button.textContent = oldText; }
+    if (!redirecting) {
+      state.cartAddInFlight = false;
+      if (button) { button.disabled = false; button.textContent = oldText; }
+    }
   }
 }
 
