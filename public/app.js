@@ -95,6 +95,8 @@ const NEB = (() => {
         } else if (r.status === 403) {
           if (data?.code === 'TWO_FACTOR_SETUP_REQUIRED') {
             msg = data.error || 'Voltooi eerst 2FA via Account → 2FA.';
+          } else if (typeof data === 'string' && /forbidden/i.test(data) && /::/.test(data)) {
+            msg = 'Upload geblokkeerd door hosting. Vernieuw de pagina (hard refresh) en probeer opnieuw.';
           } else if (typeof data === 'string' && data.trim()) {
             msg = data.trim().slice(0, 240);
           } else if (data?.error) {
@@ -110,28 +112,54 @@ const NEB = (() => {
     });
   };
 
-  function maxDirectUploadBytes() {
+  function isHostedDeployment() {
+    const host = String(window.location.hostname || '').toLowerCase();
+    return host && host !== 'localhost' && host !== '127.0.0.1' && !host.endsWith('.local');
+  }
+
+  function uploadPlatformConfig() {
+    const stored = window.NEB_UPLOAD_PLATFORM || {};
     const cfg = window.NEB_CONFIG?.platform || {};
-    const n = Number(cfg.maxDirectUploadBytes);
-    return Number.isFinite(n) && n > 0 ? n : Math.floor(3.5 * 1024 * 1024);
+    const maxDirect = Number(cfg.maxDirectUploadBytes ?? stored.maxDirectUploadBytes);
+    const chunkBytes = Number(cfg.chunkUploadBytes ?? stored.chunkUploadBytes);
+    const chunkedEnabled = cfg.chunkedUploadsEnabled ?? stored.chunkedUploadsEnabled;
+    return {
+      maxDirectUploadBytes: Number.isFinite(maxDirect) && maxDirect > 0
+        ? maxDirect
+        : Math.floor(3.5 * 1024 * 1024),
+      chunkUploadBytes: Number.isFinite(chunkBytes) && chunkBytes > 0
+        ? chunkBytes
+        : 2 * 1024 * 1024,
+      chunkedUploadsEnabled: chunkedEnabled !== false
+    };
+  }
+
+  function setUploadPlatformConfig(platform) {
+    if (!platform || typeof platform !== 'object') return;
+    window.NEB_UPLOAD_PLATFORM = { ...uploadPlatformConfig(), ...platform };
+    window.NEB_CONFIG = window.NEB_CONFIG || {};
+    window.NEB_CONFIG.platform = window.NEB_UPLOAD_PLATFORM;
+  }
+
+  function maxDirectUploadBytes() {
+    return uploadPlatformConfig().maxDirectUploadBytes;
   }
 
   function chunkUploadBytes() {
-    const cfg = window.NEB_CONFIG?.platform || {};
-    const n = Number(cfg.chunkUploadBytes);
-    return Number.isFinite(n) && n > 0 ? n : 3 * 1024 * 1024;
+    return uploadPlatformConfig().chunkUploadBytes;
   }
 
   function shouldUseChunkedUpload(file) {
     if (!file) return false;
-    const platform = window.NEB_CONFIG?.platform || {};
+    const platform = uploadPlatformConfig();
     if (platform.chunkedUploadsEnabled && file.size > maxDirectUploadBytes()) return true;
     return file.size > maxDirectUploadBytes();
   }
 
   function preferChunkedAdminUpload(file) {
     if (!file) return false;
-    const platform = window.NEB_CONFIG?.platform || {};
+    if (isHostedDeployment()) return true;
+    const platform = uploadPlatformConfig();
     if (platform.chunkedUploadsEnabled) return true;
     return shouldUseChunkedUpload(file);
   }
@@ -167,6 +195,8 @@ const NEB = (() => {
     shouldUseChunkedUpload,
     preferChunkedAdminUpload,
     uploadChunked,
+    setUploadPlatformConfig,
+    uploadPlatformConfig,
 
     me: () => {
       if (window.NEB_USER) return Promise.resolve(window.NEB_USER);
@@ -329,16 +359,17 @@ const NEB = (() => {
       if (!slot) return;
       await this.paintCart();
       const user = window.NEB_USER || await this.me().catch(() => null);
-      if (!user) {
-        if (this._navMenuCloseHandler) {
-          document.removeEventListener('click', this._navMenuCloseHandler);
-          this._navMenuCloseHandler = null;
-        }
-        slot.innerHTML = `
+    if (!user) {
+      if (this._navMenuCloseHandler) {
+        document.removeEventListener('click', this._navMenuCloseHandler);
+        this._navMenuCloseHandler = null;
+      }
+      slot.innerHTML = `
           <a class="digitify-header__auth-link" href="/login">Inloggen</a>
           <a class="digitify-header__auth-link digitify-header__auth-link--solid" href="/register">Aanmelden</a>`;
-        return null;
-      }
+      window.DigitifyShell?.paintMobileAuth?.(null);
+      return null;
+    }
       const isStaff = user.role === 'OWNER' || user.role === 'ADMIN';
       slot.innerHTML = `
         <div class="nav-user-menu" id="navUserMenu">
@@ -380,6 +411,7 @@ const NEB = (() => {
         await this.post('/api/auth/logout');
         location.href = '/login';
       });
+      window.DigitifyShell?.paintMobileAuth?.(user);
       return user;
     },
 

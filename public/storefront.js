@@ -8,6 +8,8 @@ import {
 } from './preview-orbit.js';
 import {
   coalesceModel3dManifest,
+  estimateModelScreenFill,
+  estimateModelScreenExtents,
   fitPerspectiveCameraToHeroDisplay,
   fitPerspectiveCameraToModel,
   inferModelFormat,
@@ -80,7 +82,6 @@ const state = {
   miniVisible: new Set(),
   reduceMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false,
   pageVisible: true,
-  categoryFilter: 'all',
   selectionPreview3dEnabled: false,
   selectionPreview3dLoading: false
 };
@@ -339,12 +340,56 @@ function fitMiniCameraToModel(camera, displayModel) {
   fitPerspectiveCameraToModel(camera, displayModel, { margin: 1.18, yLift: 0.02 });
 }
 
+function isCompactHeroViewport() {
+  return window.innerWidth <= 900;
+}
+
+function isTabletHeroViewport() {
+  return window.innerWidth > 900 && window.innerWidth <= 1099;
+}
+
+function resolveHeroFitBase(manifest) {
+  const userScale = modelDisplayScale(manifest);
+  let margin = 1.22;
+  if (isCompactHeroViewport()) margin = 1.06;
+  else if (isTabletHeroViewport()) margin = 1.1;
+  return { userScale, margin, yLift: 0.02 };
+}
+
+function resolveHeroFitLimits() {
+  if (isCompactHeroViewport()) {
+    return { minAxis: 0.5, maxAxis: 0.76, maxBoost: 1.4 };
+  }
+  if (isTabletHeroViewport()) {
+    return { minAxis: 0.48, maxAxis: 0.74, maxBoost: 1.32 };
+  }
+  return { minAxis: 0.46, maxAxis: 0.7, maxBoost: 1.15 };
+}
+
 function fitHeroCameraToModel(displayModel, manifest) {
-  fitPerspectiveCameraToHeroDisplay(state.camera, displayModel, {
-    userScale: modelDisplayScale(manifest),
-    margin: 1.2,
-    yLift: 0.02
-  });
+  const base = resolveHeroFitBase(manifest);
+  fitPerspectiveCameraToHeroDisplay(state.camera, displayModel, base);
+
+  const limits = resolveHeroFitLimits();
+  let boost = 1;
+  let extents = estimateModelScreenExtents(state.camera, displayModel);
+  while (extents.maxAxis < limits.minAxis && boost < limits.maxBoost) {
+    boost *= 1.05;
+    fitPerspectiveCameraToHeroDisplay(state.camera, displayModel, {
+      ...base,
+      userScale: base.userScale * boost
+    });
+    extents = estimateModelScreenExtents(state.camera, displayModel);
+    if (extents.maxAxis > limits.maxAxis) {
+      boost /= 1.05;
+      fitPerspectiveCameraToHeroDisplay(state.camera, displayModel, {
+        ...base,
+        userScale: base.userScale * boost
+      });
+      break;
+    }
+  }
+
   syncHeroViewFromCamera();
   applyHeroViewZoom();
 }
@@ -597,24 +642,7 @@ async function loadSelectionPreview(product) {
 }
 
 function filteredProducts() {
-  const filter = String(state.categoryFilter || 'all').toLowerCase();
-  if (filter === '3d') return state.products.filter((p) => p.category === '3d' || hasProductModel3d(p));
-  if (filter === 'standard') return state.products.filter((p) => p.category === 'standard' && !hasProductModel3d(p));
   return state.products;
-}
-
-function renderCategoryFilters() {
-  const host = $('#storefrontCategoryFilters');
-  if (!host) return;
-  const current = String(state.categoryFilter || 'all').toLowerCase();
-  const tabs = [
-    { id: 'all', label: 'Alle producten' },
-    { id: '3d', label: 'Met 3D preview' },
-    { id: 'standard', label: 'Standaard' }
-  ];
-  host.innerHTML = tabs.map((tab) =>
-    `<button type="button" class="shop-filter-tab${current === tab.id ? ' active' : ''}" data-category-filter="${tab.id}">${escapeHtml(tab.label)}</button>`
-  ).join('');
 }
 
 function productFromUrlParam() {
@@ -1670,7 +1698,6 @@ async function init() {
     ? NEB.sortCatalogProducts(Array.isArray(config.products) ? config.products : [])
     : (Array.isArray(config.products) ? config.products : [])
   ).filter((p) => p && p.enabled !== false);
-  renderCategoryFilters();
   const fromUrl = productFromUrlParam();
   const featured = fromUrl
     || state.products.find((p) => p.isFeatured)
@@ -1691,14 +1718,6 @@ async function init() {
 }
 
 function bindStorefrontEvents() {
-  $('#storefrontCategoryFilters')?.addEventListener('click', (event) => {
-    const tab = event.target.closest('[data-category-filter]');
-    if (!tab) return;
-    state.categoryFilter = String(tab.dataset.categoryFilter || 'all');
-    renderCategoryFilters();
-    renderOptions();
-  });
-
   $('#storefrontProducts')?.addEventListener('click', (event) => {
     const card = event.target.closest('[data-product-id]');
     if (!card) return;

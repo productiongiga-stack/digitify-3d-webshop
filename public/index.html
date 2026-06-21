@@ -19,9 +19,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=23">
   <link rel="stylesheet" href="app.css?v=7">
-  <link rel="stylesheet" href="digitify-shell.css?v=11">
+  <link rel="stylesheet" href="digitify-shell.css?v=12">
 </head>
 <body class="storefront-page theme-light digitify-shop-body" data-nav="producten">
 
@@ -73,7 +73,6 @@
         <div class="storefront-options-head">
           <span class="section-eyebrow">Productkeuze</span>
           <h2 class="section-title">Selecteer je product en variant</h2>
-          <div class="shop-filter-tabs" id="storefrontCategoryFilters"></div>
         </div>
         <div class="storefront-layout">
           <div class="storefront-products" id="storefrontProducts"></div>
@@ -97,16 +96,16 @@
                   </div>
                   <span class="storefront-selection-loader-label">3D laden…</span>
                 </div>
-              </div>
-              <div class="storefront-selection-meta">
-                <span class="storefront-selection-eyebrow" id="selectionPreviewEyebrow">Geselecteerd product</span>
-                <strong id="selectionPreviewLabel">—</strong>
-                <button type="button" class="storefront-selection-3d-toggle" id="selection3dToggle" hidden aria-pressed="false">
+                <button type="button" class="storefront-selection-3d-toggle storefront-selection-3d-toggle--overlay" id="selection3dToggle" hidden aria-pressed="false">
                   <span class="storefront-selection-3d-toggle-icon" aria-hidden="true">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>
                   </span>
                   <span id="selection3dToggleLabel">3D bekijken</span>
                 </button>
+              </div>
+              <div class="storefront-selection-meta">
+                <span class="storefront-selection-eyebrow" id="selectionPreviewEyebrow">Geselecteerd product</span>
+                <strong id="selectionPreviewLabel">—</strong>
                 <p class="storefront-motion-notice muted compact" id="storefrontMotionNotice" hidden>Statische preview — animatie uitgeschakeld (bewegingsvoorkeur systeem).</p>
               </div>
             </div>
@@ -159,8 +158,8 @@
 
   <div id="siteFooterMount"></div>
 
-  <script src="app.js?v=12"></script>
-  <script src="digitify-shell.js?v=11"></script>
-  <script type="module" src="storefront.js?v=16"></script>
+  <script src="app.js?v=15"></script>
+  <script src="digitify-shell.js?v=12"></script>
+  <script type="module" src="storefront.js?v=21"></script>
 </body>
 </html>

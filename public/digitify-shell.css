@@ -595,6 +595,45 @@ body.digitify-shop-body .storefront-page > main {
   width: 100%;
 }
 
+.digitify-mobile-nav--shop .digitify-mobile-nav__auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 2px 8px 4px;
+}
+
+.digitify-mobile-nav--shop .digitify-mobile-nav__auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid rgba(26, 21, 16, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #1a1510;
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.digitify-mobile-nav--shop .digitify-mobile-nav__auth-btn:hover {
+  border-color: rgba(240, 160, 74, 0.42);
+  background: rgba(255, 252, 247, 0.98);
+  transform: translateY(-1px);
+}
+
+.digitify-mobile-nav--shop .digitify-mobile-nav__auth-btn--solid {
+  border-color: rgba(240, 160, 74, 0.34);
+  background: linear-gradient(135deg, rgba(255, 175, 81, 0.28) 0%, rgba(255, 175, 81, 0.12) 100%);
+}
+
 .digitify-mobile-nav--shop .digitify-mobile-nav__footer {
   display: flex;
   align-items: center;
@@ -698,23 +737,27 @@ body.digitify-shop-body .digitify-header__cta {
     background: none;
   }
 
-  body.digitify-shop-body .digitify-header__auth {
+  body.digitify-shop-body .digitify-header__auth:not(:has(.nav-user-menu)) {
+    display: none !important;
+  }
+
+  body.digitify-shop-body .digitify-header__auth:has(.nav-user-menu) {
     display: inline-flex;
     min-width: 0;
     gap: 4px;
     flex-wrap: nowrap;
   }
 
+  body.digitify-shop-body.admin-page .digitify-header__auth:has(.nav-user-menu),
+  body.digitify-shop-body.account-page .digitify-header__auth:has(.nav-user-menu) {
+    display: inline-flex;
+    min-width: 0;
+  }
+
   body.digitify-shop-body .digitify-header__auth-link {
     padding: 0 7px;
     font-size: 0.5625rem;
     letter-spacing: 0.06em;
-  }
-
-  body.digitify-shop-body.admin-page .digitify-header__auth,
-  body.digitify-shop-body.account-page .digitify-header__auth {
-    display: inline-flex;
-    min-width: 0;
   }
 
   body.digitify-shop-body.admin-page .digitify-header__cta,

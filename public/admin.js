@@ -124,6 +124,25 @@ function escText(v) {
   return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
+function syncUploadPlatformFromConfig(cfg) {
+  if (cfg?.platform) {
+    if (window.NEB?.setUploadPlatformConfig) NEB.setUploadPlatformConfig(cfg.platform);
+    else {
+      window.NEB_UPLOAD_PLATFORM = cfg.platform;
+      window.NEB_CONFIG = window.NEB_CONFIG || {};
+      window.NEB_CONFIG.platform = cfg.platform;
+    }
+  }
+}
+
+function preserveUploadPlatformOnConfig(nextConfig) {
+  const platform = window.NEB_UPLOAD_PLATFORM || window.NEB_CONFIG?.platform;
+  if (platform && nextConfig && typeof nextConfig === 'object') {
+    nextConfig.platform = { ...platform };
+  }
+  return nextConfig;
+}
+
 async function uploadProductMockupFile(file) {
   if (!file) throw new Error('Geen bestand geselecteerd');
   const meta = {
@@ -655,6 +674,9 @@ function formatAuditDetails(details) {
 
   if (CURRENT_USER.role === 'OWNER') {
     document.querySelectorAll('[data-owner-only]').forEach(el => el.hidden = false);
+    NEB.get('/api/admin/config')
+      .then((cfg) => syncUploadPlatformFromConfig(cfg))
+      .catch(() => {});
     const settingsTabs = document.getElementById('settingsTabs');
     if (settingsTabs && !settingsTabs._stabClickHandler) {
       settingsTabs._stabClickHandler = (e) => {
@@ -4931,14 +4953,24 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
     if (isNew) { NEB.toast('Sla het product eerst op om kleur-mockups te uploaden', 'info'); e.target.value = ''; return; }
     const prodId = draft.products?.[productIdx]?.id;
     if (!prodId) { NEB.toast('Sla het product eerst op', 'error'); e.target.value = ''; return; }
-    const form = new FormData();
-    form.append('mockup', file, file.name);
     const uploadBtn = modal.querySelector(`[data-modal-color-mockup="${CSS.escape(hex)}"]`);
     try {
       if (uploadBtn) { uploadBtn.disabled = true; uploadBtn.textContent = '...'; }
-      const out = await NEB.json(`/api/admin/products/${encodeURIComponent(prodId)}/colors/${encodeURIComponent(hex)}/mockup`, { method: 'POST', body: form });
-      const newPath = out.mockupPath || out.path || '';
+      const out = await uploadProductMockupFile(file);
+      const newPath = String(out.path || out.mockupPath || '').trim().replace(/^\/+/, '');
       if (newPath) {
+        await NEB.put(`/api/admin/products/${encodeURIComponent(prodId)}`, {
+          product: {
+            ...draft.products[productIdx],
+            colorData: {
+              ...(draft.products[productIdx].colorData || {}),
+              [hex]: {
+                ...((draft.products[productIdx].colorData || {})[hex] || {}),
+                mockupPath: newPath
+              }
+            }
+          }
+        });
         colorDataDraft[hex] = { ...(colorDataDraft[hex] || {}), mockupPath: newPath };
         if (draft.products?.[productIdx]) {
           const next = { ...(draft.products[productIdx].colorData || {}) };
@@ -5192,6 +5224,7 @@ async function loadSettings() {
   if (CURRENT_USER.role !== 'OWNER') return;
   const cfg = await NEB.get('/api/admin/config');
   window.NEB_CONFIG = cfg || {};
+  syncUploadPlatformFromConfig(cfg);
   NEB.applyBranding(window.NEB_CONFIG);
   const wrap = document.getElementById('settingsWrap');
   wrap.innerHTML = renderSettings(cfg);
@@ -5965,7 +5998,7 @@ function bindSettings(cfg) {
     clone.products = normalizeProducts(clone.products || []);
     Object.keys(draft).forEach((key) => { delete draft[key]; });
     Object.assign(draft, clone);
-    window.NEB_CONFIG = JSON.parse(JSON.stringify(clone));
+    window.NEB_CONFIG = preserveUploadPlatformOnConfig(JSON.parse(JSON.stringify(clone)));
     NEB.applyBranding(window.NEB_CONFIG);
     if (window.NEB?.invalidateConfigCache) NEB.invalidateConfigCache();
     savedSnapshot = JSON.parse(JSON.stringify(clone));

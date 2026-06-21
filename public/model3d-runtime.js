@@ -686,6 +686,52 @@ export function fitPerspectiveCameraToHeroDisplay(camera, displayModel, options 
   pivot.updateMatrixWorld(true);
 }
 
+/** Approximate view fraction (0–1) covered by the model axis-aligned bounds in NDC. */
+export function estimateModelScreenExtents(camera, displayModel) {
+  if (!camera || !displayModel) {
+    return { fillW: 0, fillH: 0, area: 0, maxAxis: 0 };
+  }
+  displayModel.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(displayModel);
+  if (box.isEmpty()) {
+    return { fillW: 0, fillH: 0, area: 0, maxAxis: 0 };
+  }
+  const { min, max } = box;
+  let minX = 1;
+  let maxX = -1;
+  let minY = 1;
+  let maxY = -1;
+  const corner = new THREE.Vector3();
+  for (let xi = 0; xi < 2; xi += 1) {
+    for (let yi = 0; yi < 2; yi += 1) {
+      for (let zi = 0; zi < 2; zi += 1) {
+        corner.set(
+          xi ? max.x : min.x,
+          yi ? max.y : min.y,
+          zi ? max.z : min.z
+        ).project(camera);
+        minX = Math.min(minX, corner.x);
+        maxX = Math.max(maxX, corner.x);
+        minY = Math.min(minY, corner.y);
+        maxY = Math.max(maxY, corner.y);
+      }
+    }
+  }
+  const fillW = Math.max(0, (maxX - minX) * 0.5);
+  const fillH = Math.max(0, (maxY - minY) * 0.5);
+  const area = Math.min(1, fillW * fillH);
+  return {
+    fillW,
+    fillH,
+    area,
+    maxAxis: Math.min(1, Math.max(fillW, fillH))
+  };
+}
+
+export function estimateModelScreenFill(camera, displayModel) {
+  return estimateModelScreenExtents(camera, displayModel).area;
+}
+
 /** Frame displayModel in a perspective camera (landscape + tall models). */
 export function fitPerspectiveCameraToModel(camera, displayModel, options = {}) {
   if (!camera || !displayModel) return;

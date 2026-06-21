@@ -280,8 +280,10 @@
     if (!slot) return;
     if (!user) {
       slot.innerHTML = `
-      <a href="/login" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Inloggen</a>
-      <a href="/register" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Aanmelden</a>`;
+      <div class="digitify-mobile-nav__auth-actions">
+        <a href="/login" class="digitify-mobile-nav__auth-btn">Inloggen</a>
+        <a href="/register" class="digitify-mobile-nav__auth-btn digitify-mobile-nav__auth-btn--solid">Aanmelden</a>
+      </div>`;
       return;
     }
     const isStaff = user.role === 'OWNER' || user.role === 'ADMIN';
@@ -507,5 +509,5 @@
     init();
   }
 
-  window.DigitifyShell = { init, refreshAuth, waitForHeaderSlot, siteBase, wpUrl };
+  window.DigitifyShell = { init, refreshAuth, paintMobileAuth, waitForHeaderSlot, siteBase, wpUrl };
 })();
