@@ -84,7 +84,8 @@ function registerChunkedUploadRoutes(app, deps) {
         const payload = await dispatchChunkedUpload(sessionMeta || meta, merged, {
           writePublicAsset,
           logAuditFromReq,
-          uploadDir
+          uploadDir,
+          req
         });
 
         return res.json({ ok: true, sessionId, done: true, ...payload });

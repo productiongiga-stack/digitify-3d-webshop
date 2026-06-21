@@ -38,7 +38,44 @@ html.digitify-shell-booting .digitify-site-header {
 
 html.digitify-shell-ready .digitify-site-header {
   opacity: 1;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.35s ease 0.08s;
+}
+
+body.digitify-shop-body .digitify-page-content {
+  opacity: 0;
+  transition: opacity 0.42s ease 0.04s;
+}
+
+html.digitify-page-ready body.digitify-shop-body .digitify-page-content {
+  opacity: 1;
+}
+
+.digitify-page-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--digitify-ivory, #fff9f2);
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 0.38s ease;
+}
+
+html.digitify-page-ready .digitify-page-overlay {
+  opacity: 0;
+}
+
+html.digitify-page-leaving .digitify-page-overlay {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.24s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .digitify-page-overlay,
+  body.digitify-shop-body .digitify-page-content,
+  html.digitify-shell-ready .digitify-site-header {
+    transition: none !important;
+  }
 }
 
 :root {
@@ -253,7 +290,7 @@ body.digitify-shop-body .digitify-header--deck .digitify-nav__link.is-active::be
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 132px;
+  min-width: 0;
   min-height: 34px;
   justify-content: flex-end;
 }
@@ -660,7 +697,16 @@ body.digitify-shop-body .digitify-header__cta {
   }
 
   body.digitify-shop-body .digitify-header__auth {
-    display: none;
+    display: inline-flex;
+    min-width: 0;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+
+  body.digitify-shop-body .digitify-header__auth-link {
+    padding: 0 7px;
+    font-size: 0.5625rem;
+    letter-spacing: 0.06em;
   }
 
   body.digitify-shop-body.admin-page .digitify-header__auth,

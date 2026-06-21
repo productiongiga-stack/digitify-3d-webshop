@@ -28,7 +28,7 @@
     const link = document.createElement('link');
     link.id = 'digitifyHeaderDeckCss';
     link.rel = 'stylesheet';
-    link.href = '/digitify-header-deck.css?v=4';
+    link.href = '/digitify-header-deck.css?v=7';
     document.head.appendChild(link);
   }
 
@@ -37,7 +37,7 @@
     const link = document.createElement('link');
     link.id = 'digitifyFooterCss';
     link.rel = 'stylesheet';
-    link.href = '/digitify-footer.css';
+    link.href = '/digitify-footer.css?v=7';
     document.head.appendChild(link);
   }
 
@@ -273,16 +273,16 @@
     if (!slot) return;
     if (!user) {
       slot.innerHTML = `
-        <a href="/login" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Inloggen</a>
-        <a href="/register" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Account aanmaken</a>`;
+      <a href="/login" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Inloggen</a>
+      <a href="/register" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Aanmelden</a>`;
       return;
     }
     const isStaff = user.role === 'OWNER' || user.role === 'ADMIN';
     slot.innerHTML = `
+      <a href="/account" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Account</a>
       <a href="/dashboard" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Mijn bestellingen</a>
-      <a href="/account" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Accountinstellingen</a>
-      ${isStaff ? `
-      <a href="/admin" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Admin</a>` : ''}
+      ${isStaff ? `<a href="/admin?tab=settings" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Instellingen</a>` : ''}
+      ${isStaff ? `<a href="/admin" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted">Admin</a>` : ''}
       <button type="button" class="digitify-mobile-nav__item digitify-mobile-nav__item--muted digitify-mobile-nav__item--button" data-mobile-logout>Uitloggen</button>`;
     slot.querySelector('[data-mobile-logout]')?.addEventListener('click', async () => {
       await window.NEB?.post('/api/auth/logout');
@@ -461,11 +461,28 @@
 
     await refreshAuth();
 
+    if (document.body.classList.contains('storefront-page')) {
+      await new Promise((resolve) => {
+        if (document.documentElement.classList.contains('digitify-storefront-ready')) {
+          resolve();
+          return;
+        }
+        document.addEventListener('digitify:storefront-ready', resolve, { once: true });
+        window.setTimeout(resolve, 2200);
+      });
+    }
+
+    document.documentElement.classList.add('digitify-page-ready');
     document.documentElement.classList.remove('digitify-shell-booting');
     document.documentElement.classList.add('digitify-shell-ready');
+    window.setTimeout(() => {
+      document.documentElement.classList.remove('digitify-page-loading', 'digitify-page-leaving');
+      document.getElementById('digitifyPageOverlay')?.remove();
+    }, 420);
 
     try {
-      if (window.NEB?.config) {
+      const hasCatalog = Array.isArray(window.NEB_CONFIG?.products) && window.NEB_CONFIG.products.length > 0;
+      if (!hasCatalog && window.NEB?.config) {
         const fresh = await NEB.config();
         window.NEB_CONFIG = fresh;
         renderHeader(fresh, { replace: false });

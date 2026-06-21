@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="digitify-shell-boot.js?v=4"></script>
+  <script src="digitify-shell-boot.js?v=7"></script>
   <title>Digitify Webshop — NFC & LED producten</title>
   <meta name="description" content="Digitify webshop — NFC-tags, LED lichtbakken en smart marketingproducten met 3D preview.">
   <meta property="og:type" content="website">
@@ -19,14 +19,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
-  <link rel="stylesheet" href="app.css?v=4">
-  <link rel="stylesheet" href="digitify-shell.css?v=4">
+  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="app.css?v=7">
+  <link rel="stylesheet" href="digitify-shell.css?v=7">
 </head>
 <body class="storefront-page theme-light digitify-shop-body" data-nav="producten">
 
   <main>
-    <section class="storefront-hero" id="productHero" data-hero-mode="loading">
+    <section class="storefront-hero" id="productHero" data-hero-mode="2d">
       <div class="storefront-hero-shade" aria-hidden="true"></div>
       <div class="storefront-hero-inner">
         <div class="storefront-hero-copy">
@@ -43,7 +43,7 @@
           </div>
         </div>
         <div class="storefront-hero-showcase" id="storefrontHeroShowcase" aria-label="Productvoorbeeld">
-          <div class="storefront-hero-stage" data-media-mode="loading" aria-hidden="true">
+          <div class="storefront-hero-stage" data-media-mode="2d" aria-hidden="true">
             <div class="storefront-media-layer storefront-media-layer--3d">
               <canvas id="hero3dCanvas"></canvas>
             </div>
@@ -53,10 +53,6 @@
           </div>
           <div class="hero-showcase-floor" aria-hidden="true"></div>
           <div class="hero-showcase-vignette" aria-hidden="true"></div>
-          <div class="hero-showcase-loader" id="hero3dLoader">
-            <span class="hero-showcase-loader-ring"></span>
-            <span>3D laden…</span>
-          </div>
         </div>
       </div>
       <nav class="storefront-hero-3d-dock" id="hero3dDock" aria-label="Kies een 3D product" hidden>
@@ -143,9 +139,8 @@
 
   <div id="siteFooterMount"></div>
 
-  <script src="app.js?v=4"></script>
-  <script src="digitify-shell.js?v=4"></script>
-  <script src="site-page.js?v=4"></script>
-  <script type="module" src="storefront.js?v=4"></script>
+  <script src="app.js?v=8"></script>
+  <script src="digitify-shell.js?v=7"></script>
+  <script type="module" src="storefront.js?v=7"></script>
 </body>
 </html>

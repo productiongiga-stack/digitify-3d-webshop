@@ -6,6 +6,16 @@ const {
   checkSmtpConfigured
 } = require('../lib/health-checks');
 
+function resolveDatabaseHost() {
+  const raw = String(process.env.DATABASE_URL || '').trim();
+  if (!raw) return '';
+  try {
+    return new URL(raw).hostname || '';
+  } catch {
+    return '';
+  }
+}
+
 function registerHealthRoutes(app, deps) {
   const {
     db,
@@ -16,7 +26,8 @@ function registerHealthRoutes(app, deps) {
     getStripeClient,
     readStoredUpload,
     uploadDir,
-    getDbDegraded
+    getDbDegraded,
+    usePg
   } = deps;
 
   app.get('/api/health', async (_req, res) => {
@@ -35,12 +46,26 @@ function registerHealthRoutes(app, deps) {
       const dbRow = await db.prepare('SELECT 1 AS ok').get();
       if (!dbRow?.ok) throw new Error('DB check failed');
       checks.database = isDegraded ? 'degraded' : 'ok';
-      if (isDegraded) {
-        details.database = {
-          status: 'degraded',
-          detail: 'PostgreSQL niet bereikbaar — catalogus-only modus (fix DATABASE_URL voor orders/checkout)'
-        };
+
+      let ownerConfigured = false;
+      try {
+        const owner = await db.prepare("SELECT id FROM users WHERE role = 'OWNER' LIMIT 1").get();
+        ownerConfigured = !!owner?.id;
+      } catch {
+        ownerConfigured = false;
       }
+
+      details.database = {
+        status: isDegraded ? 'degraded' : 'ok',
+        mode: isDegraded ? 'memory-fallback' : (usePg ? 'postgresql' : 'sqlite'),
+        host: resolveDatabaseHost() || null,
+        ownerConfigured,
+        detail: isDegraded
+          ? 'PostgreSQL niet bereikbaar — catalogus-only modus (orders, login en admin-wijzigingen worden niet opgeslagen)'
+          : (ownerConfigured
+            ? 'PostgreSQL bereikbaar'
+            : 'PostgreSQL bereikbaar maar geen owner-account — run npm run setup:production-db')
+      };
 
       const cfg = await getConfig();
       const storage = await checkStorageReachable(readStoredUpload, uploadDir);

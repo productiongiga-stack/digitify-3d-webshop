@@ -63,6 +63,8 @@ const NEB = (() => {
     return yiq >= 162;
   }
 
+  let configRequest = null;
+
   const json = (path, opts = {}) => {
     if (window.location.protocol === 'file:' && String(path || '').startsWith('/')) {
       const err = new Error('Lokale file-modus gedetecteerd. Open via http://localhost:3737 zodat API-calls werken.');
@@ -147,7 +149,32 @@ const NEB = (() => {
     uploadChunked,
 
     me: () => json('/api/auth/me').then(d => d.user),
-    config: () => json('/api/config'),
+    config: () => {
+      if (!configRequest) {
+        if (window.__NEB_CONFIG_PROMISE) {
+          configRequest = window.__NEB_CONFIG_PROMISE
+            .then((cfg) => {
+              window.__NEB_CONFIG_PROMISE = null;
+              if (cfg && typeof cfg === 'object') window.NEB_CONFIG = cfg;
+              return cfg || window.NEB_CONFIG || {};
+            })
+            .catch((err) => {
+              configRequest = null;
+              throw err;
+            });
+        } else {
+          configRequest = json('/api/config').catch((err) => {
+            configRequest = null;
+            throw err;
+          });
+        }
+      }
+      return configRequest;
+    },
+
+    invalidateConfigCache() {
+      configRequest = null;
+    },
 
     fmtEUR: (n) => '€' + (Number(n) || 0).toFixed(2).replace('.', ','),
     sortCatalogProducts(products) {
@@ -254,7 +281,7 @@ const NEB = (() => {
       if (!user) {
         slot.innerHTML = `
           <a class="digitify-header__auth-link" href="/login">Inloggen</a>
-          <a class="digitify-header__auth-link digitify-header__auth-link--solid" href="/register">Account</a>`;
+          <a class="digitify-header__auth-link digitify-header__auth-link--solid" href="/register">Aanmelden</a>`;
         await this.paintCart();
         return null;
       }
@@ -267,14 +294,15 @@ const NEB = (() => {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </a>
           <div class="menu">
+            <a href="/account">Account</a>
+            ${isStaff ? `<a href="/admin?tab=settings">Instellingen</a>` : ''}
+            <div class="divider"></div>
             <a href="/dashboard">Mijn bestellingen <span class="role-badge">${user.role}</span></a>
             <a href="/cart">Winkelmand</a>
-            <a href="/account">Accountinstellingen</a>
             ${isStaff ? `
             <div class="divider"></div>
             <a href="/admin">Bestellingen</a>
-            <a href="/admin?tab=users">Klanten</a>
-            <a href="/admin?tab=settings">Instellingen</a>` : ''}
+            <a href="/admin?tab=users">Klanten</a>` : ''}
             <div class="divider"></div>
             <a href="/designer">Designer</a>
             <div class="divider"></div>

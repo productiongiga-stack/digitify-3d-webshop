@@ -124,6 +124,20 @@ function escText(v) {
   return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
+async function uploadProductMockupFile(file) {
+  if (!file) throw new Error('Geen bestand geselecteerd');
+  if (NEB.shouldUseChunkedUpload?.(file)) {
+    return NEB.uploadChunked(file, {
+      kind: 'productMockup',
+      filename: file.name,
+      mimetype: file.type || ''
+    });
+  }
+  const form = new FormData();
+  form.append('mockup', file, file.name);
+  return NEB.json('/api/admin/products/mockup', { method: 'POST', body: form });
+}
+
 function shippingStatusLabel(code) {
   const map = {
     PENDING: 'Aangemaakt',
@@ -3006,12 +3020,10 @@ function bindDesignerMockupModalUi(modal, ctx = {}) {
   modal.querySelector('#pmDesignerMockupFile')?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const form = new FormData();
-    form.append('mockup', file, file.name);
     const btn = modal.querySelector('#pmDesignerMockupUploadBtn');
     try {
       if (btn) { btn.disabled = true; btn.textContent = 'Upload...'; }
-      const out = await NEB.json('/api/admin/products/mockup', { method: 'POST', body: form });
+      const out = await uploadProductMockupFile(file);
       const newPath = String(out.path || '').trim().replace(/^\/+/, '');
       if (modal.querySelector('#pmDesignerMockupPath')) modal.querySelector('#pmDesignerMockupPath').value = newPath;
       if (newPath && ctx.draft?.products?.[ctx.productIdx]) {
@@ -4838,12 +4850,10 @@ function openProductModal(productIdx, draft, globalCfg, rerenderFn, persistFn = 
   modal.querySelector('#pmMockupFile').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const form = new FormData();
-    form.append('mockup', file, file.name);
     const btn = modal.querySelector('#pmMockupUploadBtn');
     try {
       if (btn) { btn.disabled = true; btn.textContent = 'Upload...'; }
-      const out = await NEB.json('/api/admin/products/mockup', { method: 'POST', body: form });
+      const out = await uploadProductMockupFile(file);
       if (modal.querySelector('#pmMockupPath')) modal.querySelector('#pmMockupPath').value = out.path || '';
       const thumb = modal.querySelector('#pmMockupThumb');
       if (thumb && out.path) thumb.innerHTML = `<img src="/${escAttr(out.path)}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" alt="">`;
@@ -5920,6 +5930,7 @@ function bindSettings(cfg) {
     Object.assign(draft, clone);
     window.NEB_CONFIG = JSON.parse(JSON.stringify(clone));
     NEB.applyBranding(window.NEB_CONFIG);
+    if (window.NEB?.invalidateConfigCache) NEB.invalidateConfigCache();
     savedSnapshot = JSON.parse(JSON.stringify(clone));
   }
 
@@ -6611,6 +6622,9 @@ function bindSettings(cfg) {
       }
       updateAllTemplateVersionUI();
       NEB.toast('Instellingen opgeslagen', 'success');
-    } catch (err) { NEB.toast(err.message, 'error'); }
+    } catch (err) {
+      if (handlePersistError(err)) return;
+      NEB.toast(err.message, 'error');
+    }
   }
 }

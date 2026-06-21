@@ -253,6 +253,8 @@ async function initDatabase() {
       }
       throw err;
     }
+    const runPgMigrations = String(process.env.PG_AUTO_INIT_SCHEMA || '').toLowerCase() === 'true';
+    if (!runPgMigrations) return;
     try {
       await db.initSchema();
       await db.exec(`
@@ -617,6 +619,16 @@ async function setSetting(key, value) {
   await db.prepare(`INSERT INTO settings(key, value) VALUES(?, ?)
               ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
     .run(key, JSON.stringify(value));
+  if (key === 'config') invalidateConfigCache();
+}
+
+let cachedConfig = null;
+let cachedConfigAt = 0;
+const CONFIG_CACHE_TTL_MS = Math.max(5000, Number(process.env.CONFIG_CACHE_TTL_MS) || 120000);
+
+function invalidateConfigCache() {
+  cachedConfig = null;
+  cachedConfigAt = 0;
 }
 
 // ── Size sorting ──────────────────────────────────────────────────────────────
@@ -953,11 +965,15 @@ function sanitizeProducts(products) {
     if (!value || value.includes('..') || /^(https?:|data:|javascript:)/i.test(value)) return '';
     return value;
   };
-  const sanitizeModel3d = (raw) => {
+  const sanitizeModel3d = (raw, posterFallback = '') => {
     const src = raw && typeof raw === 'object' ? raw : {};
     const modelPath = sanitizeAssetPath(src.modelPath || src.path || '');
     let materialPath = sanitizeAssetPath(src.materialPath || '');
-    const posterPath = sanitizeAssetPath(src.posterPath || src.poster || '');
+    let posterPath = sanitizeAssetPath(src.posterPath || src.poster || '');
+    const enabled3d = !!modelPath && src.enabled !== false;
+    if (enabled3d && !posterPath) {
+      posterPath = sanitizeAssetPath(posterFallback || '');
+    }
     const scaleRaw = Number(src.scale);
     const rotationXRaw = Number(src.rotationX);
     const rotationYRaw = Number(src.rotationY);
@@ -1043,7 +1059,7 @@ function sanitizeProducts(products) {
       if (builtIn?.length) sizes = builtIn.map(s => ({ ...s }));
       else sizes = [{ code: 'STD', widthMm: 100, heightMm: 100 }];
     }
-    const model3d = sanitizeModel3d(p?.model3d);
+    const model3d = sanitizeModel3d(p?.model3d, mockupPath || designerMockupPath || 'assets/tshirt_mockup.png');
     let category = String(p?.category || '').trim().toLowerCase();
     if (category !== '3d' && category !== 'standard') {
       category = model3d.enabled ? '3d' : 'standard';
@@ -1094,6 +1110,10 @@ async function ensureConfig() {
 }
 
 async function getConfig() {
+  const now = Date.now();
+  if (cachedConfig && (now - cachedConfigAt) < CONFIG_CACHE_TTL_MS) {
+    return cachedConfig;
+  }
   await ensureConfig();
   const stored = (await getSetting('config')) || {};
   const merged = { ...DEFAULT_CONFIG, ...stored };
@@ -1123,6 +1143,8 @@ async function getConfig() {
   if (Array.isArray(merged.sizes)) merged.sizes = sortSizes(merged.sizes);
   merged.products = sanitizeProducts(merged.products);
   merged.site = { ...(DEFAULT_CONFIG.site || {}), ...(stored.site || {}) };
+  cachedConfig = merged;
+  cachedConfigAt = Date.now();
   return merged;
 }
 
@@ -1142,7 +1164,7 @@ async function ensureOwner() {
 }
 
 module.exports = {
-  db,
+  get db() { return db; },
   getConfig, setSetting, getSetting,
   ensureOwner, ensureConfig,
   getOrCreateSecret,

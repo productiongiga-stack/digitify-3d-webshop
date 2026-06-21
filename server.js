@@ -40,7 +40,8 @@ const {
 const { collectProductsWarnings } = require('./lib/product-warnings');
 const { securityHeadersMiddleware } = require('./lib/security-headers');
 const { mirrorPublicAssetIfConfigured } = require('./lib/asset-storage');
-const { validateProductsPosterPolicy } = require('./lib/product-poster-policy');
+const { handleProductMockupUpload, isImageUpload } = require('./lib/product-mockup-upload');
+const { validateProductsPosterPolicy, coalesceProductsPosterPaths } = require('./lib/product-poster-policy');
 const { captureServerError } = require('./lib/observability');
 const { registerClientLogRoutes } = require('./routes/client-log');
 const { registerHealthRoutes } = require('./routes/health');
@@ -105,8 +106,7 @@ const productMockupUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
-    const mime = String(file.mimetype || '').toLowerCase();
-    if (mime.startsWith('image/')) return cb(null, true);
+    if (isImageUpload(file)) return cb(null, true);
     cb(new Error('Alleen afbeeldingsbestanden zijn toegestaan'));
   }
 });
@@ -144,7 +144,7 @@ async function boot() {
       _sessionStore = new PgSessionStore({
         pool: _sessionPool,
         tableName: 'user_sessions',
-        createTableIfMissing: false
+        createTableIfMissing: true
       });
     }
     _sessionHandler = session({
@@ -5080,6 +5080,7 @@ app.put('/api/admin/config', requireAuth, requireRole('OWNER', 'ADMIN'), async (
     cfg.seo = nextSeo;
   }
   if (Array.isArray(cfg.products)) {
+    cfg.products = coalesceProductsPosterPaths(cfg.products);
     const posterGaps = validateProductsPosterPolicy(cfg.products);
     if (posterGaps.length) {
       return res.status(400).json({
@@ -5223,7 +5224,8 @@ registerHealthRoutes(app, {
   getStripeClient,
   readStoredUpload,
   uploadDir: UPLOAD_DIR,
-  getDbDegraded: () => dbModule.dbDegraded
+  getDbDegraded: () => dbModule.dbDegraded,
+  usePg: USE_PG
 });
 registerAdminOrdersBulkRoutes(app, {
   requireAuth,
@@ -5280,39 +5282,15 @@ app.post('/api/admin/branding/upload', requireAuth, requireRole('OWNER'), brandi
 });
 
 app.post('/api/admin/products/mockup', requireAuth, requireRole('OWNER', 'ADMIN'), productMockupUpload.single('mockup'), async (req, res) => {
-  if (!req.file?.buffer) return res.status(400).json({ error: 'Geen bestand ontvangen' });
   try {
-    const fileSuffix = crypto.randomBytes(4).toString('hex');
-    const outName = `mockup-${Date.now()}-${fileSuffix}.png`;
-    const relPath = `assets/products/${outName}`;
-    const optimized = await sharp(req.file.buffer, { failOn: 'none' })
-      .rotate()
-      .resize({
-        width: 1200,
-        height: 1200,
-        fit: 'inside',
-        withoutEnlargement: true
-      })
-      .png({ compressionLevel: 9, quality: 90 })
-      .toBuffer();
-    await writePublicAsset(relPath, optimized, 'image/png');
-
-    await logAuditFromReq(req, {
-      action: 'CONFIG_UPDATED',
-      entityType: 'config',
-      entityId: 'main',
-      summary: 'Product mockup geüpload',
-      details: {
-        path: relPath,
-        originalName: req.file.originalname || null,
-        mime: req.file.mimetype || null,
-        sizeBytes: optimized.length
-      }
+    const out = await handleProductMockupUpload(req.file, {
+      writePublicAsset,
+      logAuditFromReq,
+      req
     });
-
-    res.json({ ok: true, path: relPath, sizeBytes: optimized.length });
+    res.json(out);
   } catch (err) {
-    res.status(400).json({ error: err.message || 'Mockup upload mislukt' });
+    res.status(err.status || 400).json({ error: err.message || 'Mockup upload mislukt' });
   }
 });
 
@@ -5610,7 +5588,7 @@ app.post('/api/admin/products/:productId/colors/:hex/mockup',
       const ext = extFromMime(req.file.mimetype || 'image/png');
       const safeName = `product-${productId}-color-${hexRaw.replace('#', '')}.${ext}`;
       const optimized = await optimizeUploadedImage(req.file.buffer, req.file.mimetype || 'image/png', 'mockup');
-      const relativePath = path.join('assets', 'branding', safeName);
+      const relativePath = `assets/branding/${safeName}`;
       await writeStoredUpload(relativePath, optimized?.buffer || req.file.buffer, optimized?.mime || req.file.mimetype || 'image/png');
 
       // Update config

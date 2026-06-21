@@ -228,9 +228,16 @@ function setHeroMediaMode(mode) {
   syncHeroChrome(mode);
 }
 
-function syncHeroChrome(mode) {
-  const loader = $('#hero3dLoader');
-  if (loader) loader.hidden = mode !== 'loading';
+function syncHeroChrome(_mode) {
+  /* Hero uses poster + crossfade; no spinner overlay. */
+}
+
+function scheduleSelectionPreview(product) {
+  if (state.selectionPreviewTimer) window.clearTimeout(state.selectionPreviewTimer);
+  state.selectionPreviewTimer = window.setTimeout(() => {
+    state.selectionPreviewTimer = null;
+    loadSelectionPreview(product);
+  }, 60);
 }
 
 function syncHeroViewFromCamera() {
@@ -449,13 +456,10 @@ function selectProduct(product) {
   state.selectedColorHex = colors[0]?.hex || '';
   state.selectedColorName = colors[0]?.name || '';
   state.selectedSize = sizes[0]?.code || 'M';
-  if (hasProductModel3d(product)) {
-    setHeroMediaMode('loading');
-  }
   renderHero();
   renderOptions();
   loadHeroModel(product);
-  loadSelectionPreview(product);
+  scheduleSelectionPreview(product);
 }
 
 function renderHero() {
@@ -506,15 +510,10 @@ function renderHero() {
   const posterEl = $('#hero3dPoster');
   const heroHas3d = hasProductModel3d(product);
   if (posterEl) {
-    if (heroHas3d) {
-      posterEl.hidden = true;
-      posterEl.removeAttribute('src');
-      posterEl.alt = '';
-    } else {
-      posterEl.hidden = false;
-      posterEl.src = poster;
-      posterEl.alt = product.name || 'Product';
-    }
+    posterEl.hidden = false;
+    posterEl.src = poster;
+    posterEl.alt = product.name || 'Product';
+    if (heroHas3d) posterEl.setAttribute('fetchpriority', 'high');
   }
   const designLink = $('#heroDesignLink');
   if (designLink) {
@@ -680,7 +679,7 @@ async function loadHeroModel(product) {
     return;
   }
 
-  setHeroMediaMode('loading');
+  setHeroMediaMode('2d');
   try {
     configureRendererQuality(state.renderer, manifest, 'hero');
     configureHeroRendererSurface(state.renderer, state.scene);
@@ -715,7 +714,7 @@ async function loadHeroModel(product) {
     console.warn('3D model laden mislukt:', err);
     report3dError(product?.id, 'hero', err);
     if (state.loadingToken !== token) return;
-    setHeroMediaMode('3d');
+    setHeroMediaMode('2d');
   }
 }
 
@@ -818,7 +817,7 @@ async function loadSelectionPreview(product) {
     return;
   }
 
-  setSelectionStageMediaMode('loading');
+  setSelectionStageMediaMode('2d');
   try {
     const object = await loadModelScene(manifest, assetUrl);
     if (state.selectionPreview.loadToken !== token) return;
@@ -1386,6 +1385,15 @@ async function addSelectedToCart() {
   const product = state.selectedProduct;
   if (!product) return;
   if (!validateStorefrontSelection()) return;
+
+  const user = await NEB.me().catch(() => null);
+  if (!user) {
+    NEB.toast('Log in om producten toe te voegen aan je winkelmand.', 'error');
+    const next = encodeURIComponent(`${location.pathname}${location.search}`);
+    setTimeout(() => { window.location.href = `/login?next=${next}`; }, 700);
+    return;
+  }
+
   const qty = Math.max(1, Math.min(99, Number($('#storefrontQty')?.value || 1) || 1));
   const button = document.activeElement?.matches?.('button') ? document.activeElement : $('#storefrontAddToCart');
   const oldText = button?.textContent || '';
@@ -1420,7 +1428,9 @@ async function addSelectedToCart() {
 }
 
 async function init() {
-  const config = await NEB.config();
+  const config = (window.NEB_CONFIG && Array.isArray(window.NEB_CONFIG.products))
+    ? window.NEB_CONFIG
+    : await NEB.config();
   state.config = config;
   window.NEB_CONFIG = config;
   if (window.NEB?.applyBranding) NEB.applyBranding(config);
@@ -1466,9 +1476,14 @@ async function init() {
   });
   $('#storefrontAddToCart')?.addEventListener('click', addSelectedToCart);
   $('#heroAddToCart')?.addEventListener('click', addSelectedToCart);
+
+  document.documentElement.classList.add('digitify-storefront-ready');
+  document.dispatchEvent(new CustomEvent('digitify:storefront-ready'));
 }
 
 init().catch((err) => {
   console.error(err);
   NEB.toast('Producten laden mislukt', 'error');
+  document.documentElement.classList.add('digitify-storefront-ready');
+  document.dispatchEvent(new CustomEvent('digitify:storefront-ready'));
 });
